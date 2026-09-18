@@ -4,7 +4,9 @@ import { Link, useLocation } from 'react-router-dom';
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
-
+  
+  const isDetailPage = location.pathname.startsWith('/hotel/');
+  
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 50);
@@ -14,16 +16,19 @@ const Navbar = () => {
   }, []);
 
   const links = [
-    { name: 'Stays', path: '/' },
-    { name: 'About', path: '/about' },
-    { name: 'Gallery', path: '/gallery' },
-    { name: 'Contact', path: '/contact' },
-  ];
+  { name: 'Stays', path: '/' },
+  { name: 'Search', path: '/search' },
+  { name: 'About', path: '/about' },
+  { name: 'Gallery', path: '/gallery' },
+  { name: 'Contact', path: '/contact' },
+];
 
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled ? 'bg-[#FAF8F5]/95 backdrop-blur-sm border-b border-gray-200' : 'bg-transparent'
+        scrolled || isDetailPage
+          ? 'bg-[#FAF8F5]/95 backdrop-blur-sm border-b border-gray-200'
+          : 'bg-transparent'
       }`}
     >
       <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">

@@ -17,6 +17,7 @@ const Footer = () => {
         <div>
           <h4 className="text-xs tracking-[0.15em] uppercase text-gray-500 mb-4">Explore</h4>
           <ul className="space-y-2 text-sm text-gray-700">
+            <li><Link to="/search" className="hover:text-teal-700">Search</Link></li>
             <li><Link to="/" className="hover:text-teal-700">Stays</Link></li>
             <li><Link to="/about" className="hover:text-teal-700">About</Link></li>
             <li><Link to="/gallery" className="hover:text-teal-700">Gallery</Link></li>

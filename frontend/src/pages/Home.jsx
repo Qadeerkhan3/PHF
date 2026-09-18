@@ -6,23 +6,21 @@ import { getNearbyHotels } from '../services/api';
 const Home = () => {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState(null);
+  const [location, setLocation] = useState({
+    lat: 34.0151,
+    lng: 71.5249,
+    label: 'Peshawar City Center'
+  });
   const [radius, setRadius] = useState(3000);
 
-  const handleLocationSet = (loc) => {
-    setLocation(loc);
-  };
-
   useEffect(() => {
-    if (!location) return;
-
     const fetchHotels = async () => {
       setLoading(true);
       try {
         const res = await getNearbyHotels(location.lat, location.lng, radius);
         setHotels(res.data);
       } catch (err) {
-        console.error(err);
+        console.error('Error fetching hotels:', err);
       } finally {
         setLoading(false);
       }
@@ -31,8 +29,8 @@ const Home = () => {
   }, [location, radius]);
 
   return (
-    <div className="min-h-screen">
-      <LocationModal onLocationSet={handleLocationSet} />
+    <div className="min-h-screen bg-[#FAF8F5]">
+      <LocationModal onLocationSet={setLocation} />
 
       <section className="px-6 pt-40 pb-16 text-center">
         <p className="text-xs tracking-[0.2em] text-gray-500 mb-4">
@@ -46,26 +44,24 @@ const Home = () => {
         </p>
       </section>
 
-      {location && (
-        <section className="px-6 max-w-3xl mx-auto pb-16 text-center">
-          <p className="text-sm text-gray-600 mb-3">
-            📍 Your location: {location.label}
-          </p>
-          <div className="flex items-center justify-center gap-4">
-            <span className="text-xs text-gray-500">Within: {(radius / 1000).toFixed(1)}km</span>
-            <input
-              type="range"
-              min="1000"
-              max="8000"
-              step="1000"
-              value={radius}
-              onChange={(e) => setRadius(parseInt(e.target.value))}
-              className="w-64 accent-teal-700"
-            />
-            <span className="text-xs text-gray-500">8km</span>
-          </div>
-        </section>
-      )}
+      <section className="px-6 max-w-3xl mx-auto pb-16 text-center">
+        <p className="text-sm text-gray-600 mb-3">
+          📍 Your location: {location.label}
+        </p>
+        <div className="flex items-center justify-center gap-4">
+          <span className="text-xs text-gray-500">Within: {(radius / 1000).toFixed(1)}km</span>
+          <input
+            type="range"
+            min="1000"
+            max="8000"
+            step="1000"
+            value={radius}
+            onChange={(e) => setRadius(parseInt(e.target.value))}
+            className="w-64 accent-teal-700"
+          />
+          <span className="text-xs text-gray-500">8km</span>
+        </div>
+      </section>
 
       <section className="px-6 max-w-6xl mx-auto pb-24">
         <p className="text-xs tracking-[0.2em] text-gray-500 mb-3">A GOOD PLACE TO BEGIN</p>
@@ -76,7 +72,7 @@ const Home = () => {
         {loading ? (
           <p className="text-gray-500">Loading hotels...</p>
         ) : hotels.length === 0 ? (
-          <p className="text-gray-500">No hotels found in this area.</p>
+          <p className="text-gray-500">No hotels found in this area. Try increasing the radius.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {hotels.map(hotel => (

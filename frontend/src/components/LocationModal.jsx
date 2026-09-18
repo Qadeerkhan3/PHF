@@ -4,53 +4,94 @@ const LocationModal = ({ onLocationSet }) => {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // Sirf ek baar per session
-    const hasAsked = sessionStorage.getItem('locationAsked');
-    if (!hasAsked) {
-      setTimeout(() => setShow(true), 1000);
+    const saved = localStorage.getItem('userLocation');
+
+    if (saved) {
+      const { lat, lng, label, timestamp } = JSON.parse(saved);
+      const ageInMinutes = (Date.now() - timestamp) / 1000 / 60;
+
+      // Agar location 30 minute se kam purani hai — cache use karo
+      if (ageInMinutes < 30) {
+        onLocationSet({ lat, lng, label });
+        return;
+      }
+
+      // Agar purani hai aur permission already granted hai — silently refresh karo
+      if (navigator.permissions) {
+        navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+          if (result.state === 'granted') {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                const newLoc = {
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  label: 'Your location',
+                  timestamp: Date.now()
+                };
+                localStorage.setItem('userLocation', JSON.stringify(newLoc));
+                onLocationSet(newLoc);
+              },
+              () => {
+                // Agar fail ho jaye, purani cache use karo
+                onLocationSet({ lat, lng, label });
+              }
+            );
+          } else {
+            // Permission denied ya prompt — cache use karo
+            onLocationSet({ lat, lng, label });
+          }
+        });
+      } else {
+        onLocationSet({ lat, lng, label });
+      }
+      return;
     }
+
+    // Pehli baar — popup dikhao
+    const timer = setTimeout(() => setShow(true), 800);
+    return () => clearTimeout(timer);
   }, []);
 
+  const saveLocation = (loc) => {
+    const withTimestamp = { ...loc, timestamp: Date.now() };
+    localStorage.setItem('userLocation', JSON.stringify(withTimestamp));
+    onLocationSet(withTimestamp);
+    setShow(false);
+  };
+
   const handleAllow = () => {
-    sessionStorage.setItem('locationAsked', 'true');
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          onLocationSet({
+          saveLocation({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
             label: 'Your location'
           });
-          setShow(false);
         },
         () => {
-          // User ne browser popup mein deny kiya
-          onLocationSet({
+          saveLocation({
             lat: 34.0151,
             lng: 71.5249,
             label: 'Peshawar City Center'
           });
-          setShow(false);
         }
       );
     } else {
-      onLocationSet({
+      saveLocation({
         lat: 34.0151,
         lng: 71.5249,
         label: 'Peshawar City Center'
       });
-      setShow(false);
     }
   };
 
   const handleNotNow = () => {
-    sessionStorage.setItem('locationAsked', 'true');
-    onLocationSet({
+    saveLocation({
       lat: 34.0151,
       lng: 71.5249,
       label: 'Peshawar City Center'
     });
-    setShow(false);
   };
 
   if (!show) return null;
@@ -58,7 +99,15 @@ const LocationModal = ({ onLocationSet }) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-[#FAF8F5] border border-gray-200 rounded p-12 max-w-md w-[90%] text-center">
-        <svg className="mx-auto mb-6 text-teal-700" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <svg
+          className="mx-auto mb-6 text-teal-700"
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        >
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
           <circle cx="12" cy="10" r="3" />
         </svg>
