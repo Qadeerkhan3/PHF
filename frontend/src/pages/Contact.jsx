@@ -1,34 +1,64 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const Contact = () => {
   const [form, setForm] = useState({ name: '', email: '', message: '' });
-  const [submitted, setSubmitted] = useState(false);
   const [toast, setToast] = useState(null);
+  const containerRef = useRef(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.utils.toArray('.fade-up').forEach((el) => {
+        gsap.from(el, {
+          y: 40,
+          opacity: 0,
+          duration: 0.8,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top 85%',
+            toggleActions: 'play none none none'
+          }
+        });
+      });
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // WhatsApp par message bhejo (pre-filled)
-    const whatsappMessage = `Assalam o Alaikum,%0A%0AName: ${form.name}%0AEmail: ${form.email}%0A%0AMessage: ${form.message}`;
-    window.open(`https://wa.me/923351092493?text=${whatsappMessage}`, '_blank');
-
+    const message = `Assalam o Alaikum,%0A%0AName: ${form.name}%0AEmail: ${form.email}%0A%0AMessage: ${form.message}`;
+    window.open(`https://wa.me/923351092493?text=${message}`, '_blank');
     showToast('WhatsApp khul raha hai... Message bhejein.', 'success');
-    setSubmitted(true);
     setForm({ name: '', email: '', message: '' });
-    setTimeout(() => setSubmitted(false), 3000);
+  };
+
+  const handleWhatsApp = () => {
+    if (!form.name && !form.message) {
+      showToast('Pehle form bharein.', 'error');
+      return;
+    }
+    handleSubmit({ preventDefault: () => {} });
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] pt-32 pb-24 relative">
+    <div
+      ref={containerRef}
+      className="min-h-screen bg-[#FAF8F5] pt-32 pb-24 relative"
+    >
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-24 right-6 z-50 px-6 py-4 rounded shadow-lg transition-all duration-300 ${
+          className={`fixed top-24 right-6 z-50 px-6 py-4 rounded-lg shadow-lg transition-all duration-300 ${
             toast.type === 'success'
               ? 'bg-teal-700 text-white'
               : 'bg-red-600 text-white'
@@ -39,19 +69,19 @@ const Contact = () => {
       )}
 
       <div className="max-w-4xl mx-auto px-6">
-        <p className="text-xs tracking-[0.2em] text-gray-500 mb-4">
+        <p className="fade-up text-xs tracking-[0.2em] text-gray-500 mb-4">
           GET IN TOUCH
         </p>
-        <h1 className="font-serif text-5xl md:text-6xl text-gray-900 mb-6">
+        <h1 className="fade-up font-serif text-5xl md:text-6xl text-gray-900 mb-6">
           Let's talk.
         </h1>
-        <p className="text-lg text-gray-600 max-w-xl mb-16">
+        <p className="fade-up text-lg text-gray-600 max-w-xl mb-16">
           Hotel owner? Traveler with a question? We'd love to hear from you.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
           {/* Form */}
-          <div>
+          <div className="fade-up">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-xs tracking-[0.15em] uppercase text-gray-500 mb-2">
@@ -85,24 +115,35 @@ const Contact = () => {
                 </label>
                 <textarea
                   value={form.message}
-                  onChange={(e) => setForm({ ...form, message: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, message: e.target.value })
+                  }
                   required
                   rows="4"
                   className="w-full bg-transparent border-b border-gray-300 focus:border-teal-700 outline-none py-3 text-gray-900 transition-colors resize-none"
                 />
               </div>
 
-              <button
-                type="submit"
-                className="bg-teal-700 hover:bg-teal-800 text-white px-8 py-3 rounded text-sm transition-colors"
-              >
-                Send via WhatsApp
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="bg-teal-700 hover:bg-teal-800 text-white px-6 py-3 rounded text-sm transition-colors"
+                >
+                  Send Message
+                </button>
+                <button
+                  type="button"
+                  onClick={handleWhatsApp}
+                  className="border border-gray-300 hover:bg-gray-50 text-gray-900 px-6 py-3 rounded text-sm transition-colors"
+                >
+                  WhatsApp
+                </button>
+              </div>
             </form>
           </div>
 
-          {/* Contact Info — REAL */}
-          <div className="space-y-8">
+          {/* Contact Info */}
+          <div className="fade-up space-y-8">
             <div>
               <p className="text-xs tracking-[0.15em] uppercase text-gray-500 mb-2">
                 Email
@@ -134,7 +175,9 @@ const Contact = () => {
                 Location
               </p>
               <p className="text-gray-800">
-                Peshawar, Khyber Pakhtunkhwa<br />Pakistan
+                Peshawar, Khyber Pakhtunkhwa
+                <br />
+                Pakistan
               </p>
             </div>
 

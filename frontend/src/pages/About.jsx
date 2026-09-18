@@ -1,17 +1,43 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const About = () => {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.utils.toArray('.fade-up').forEach((el) => {
+        gsap.from(el, {
+          y: 40,
+          opacity: 0,
+          duration: 0.8,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top 85%',
+            toggleActions: 'play none none none'
+          }
+        });
+      });
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#FAF8F5] pt-32 pb-24">
+    <div ref={containerRef} className="min-h-screen bg-[#FAF8F5] pt-32 pb-24">
       <div className="max-w-3xl mx-auto px-6">
         {/* Hero */}
-        <p className="text-xs tracking-[0.2em] text-gray-500 mb-4">
+        <p className="fade-up text-xs tracking-[0.2em] text-gray-500 mb-4">
           OUR POINT OF VIEW
         </p>
-        <h1 className="font-serif text-5xl md:text-6xl text-gray-900 mb-8 leading-tight">
+        <h1 className="fade-up font-serif text-5xl md:text-6xl text-gray-900 mb-8 leading-tight">
           A better welcome<br />starts here.
         </h1>
-        <p className="text-lg text-gray-600 leading-relaxed mb-16">
+        <p className="fade-up text-lg text-gray-600 leading-relaxed mb-16">
           We believe finding a place to stay should feel as personal as the
           city you're visiting. Peshawar Hotel Finder brings together the best
           of our city — its generous hospitality, its hidden corners, and the
@@ -19,7 +45,7 @@ const About = () => {
         </p>
 
         {/* Image */}
-        <div className="my-16 overflow-hidden rounded">
+        <div className="fade-up my-16 overflow-hidden rounded">
           <img
             src="https://images.unsplash.com/photo-1599661046289-e31897846e41?w=1200"
             alt="Peshawar"
@@ -28,7 +54,7 @@ const About = () => {
         </div>
 
         {/* Mission */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 my-16">
+        <div className="fade-up grid grid-cols-1 md:grid-cols-2 gap-12 my-16">
           <div>
             <p className="text-xs tracking-[0.2em] text-gray-500 mb-3">
               OUR MISSION
@@ -60,7 +86,7 @@ const About = () => {
         </div>
 
         {/* Stats */}
-        <div className="border-t border-gray-200 pt-16 mt-16">
+        <div className="fade-up border-t border-gray-200 pt-16 mt-16">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div>
               <p className="font-serif text-5xl text-teal-700 mb-2">24+</p>
@@ -78,7 +104,7 @@ const About = () => {
         </div>
 
         {/* CTA */}
-        <div className="mt-24 text-center border-t border-gray-200 pt-16">
+        <div className="fade-up mt-24 text-center border-t border-gray-200 pt-16">
           <p className="text-xs tracking-[0.2em] text-gray-500 mb-3">
             FOR HOTEL OWNERS
           </p>
@@ -90,11 +116,16 @@ const About = () => {
             Peshawar. Listing is free, and our team is here to help.
           </p>
           <a
-            href="mailto:hello@peshawarhotelfinder.com"
+            href="https://wa.me/923351092493?text=Assalam%20o%20Alaikum%2C%20mujhe%20apna%20hotel%20Peshawar%20Hotel%20Finder%20par%20list%20karwana%20hai."
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-block border border-gray-300 hover:bg-gray-50 text-gray-900 px-8 py-3 rounded text-sm transition"
           >
-            List your hotel
+            List your hotel on WhatsApp
           </a>
+          <p className="text-xs text-gray-400 mt-4">
+            Ya email karein: qadeeru89@gmail.com
+          </p>
         </div>
       </div>
     </div>

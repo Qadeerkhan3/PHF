@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const Gallery = () => {
   const [filter, setFilter] = useState('All');
+  const containerRef = useRef(null);
 
   const images = [
     { id: 1, src: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800', category: 'Luxury', alt: 'Pearl Continental' },
@@ -17,28 +22,54 @@ const Gallery = () => {
 
   const categories = ['All', 'Luxury', 'Budget', 'Family'];
 
-  const filteredImages = filter === 'All'
-    ? images
-    : images.filter(img => img.category === filter);
+  const filteredImages =
+    filter === 'All' ? images : images.filter((img) => img.category === filter);
+
+  // GSAP — page load + filter change par animate
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.from('.fade-up', {
+        y: 40,
+        opacity: 0,
+        duration: 0.8,
+        stagger: 0.1,
+        ease: 'power2.out'
+      });
+
+      gsap.from('.gallery-item', {
+        y: 40,
+        opacity: 0,
+        scale: 0.95,
+        duration: 0.6,
+        stagger: 0.08,
+        ease: 'power2.out'
+      });
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, [filter]);
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] pt-32 pb-24">
+    <div
+      ref={containerRef}
+      className="min-h-screen bg-[#FAF8F5] pt-32 pb-24"
+    >
       <div className="max-w-6xl mx-auto px-6">
         {/* Hero */}
-        <p className="text-xs tracking-[0.2em] text-gray-500 mb-4">
+        <p className="fade-up text-xs tracking-[0.2em] text-gray-500 mb-4">
           A VISUAL JOURNEY
         </p>
-        <h1 className="font-serif text-5xl md:text-6xl text-gray-900 mb-6">
+        <h1 className="fade-up font-serif text-5xl md:text-6xl text-gray-900 mb-6">
           Inside Peshawar's finest stays.
         </h1>
-        <p className="text-lg text-gray-600 max-w-2xl mb-12">
+        <p className="fade-up text-lg text-gray-600 max-w-2xl mb-12">
           A collection of moments from hotels across the city — from grand
           landmarks to quiet neighborhood stays.
         </p>
 
         {/* Filter */}
-        <div className="flex flex-wrap gap-3 mb-12">
-          {categories.map(cat => (
+        <div className="fade-up flex flex-wrap gap-3 mb-12">
+          {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setFilter(cat)}
@@ -55,14 +86,15 @@ const Gallery = () => {
 
         {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredImages.map(img => (
+          {filteredImages.map((img) => (
             <div
               key={img.id}
-              className="group relative overflow-hidden rounded cursor-pointer aspect-[4/5]"
+              className="gallery-item group relative overflow-hidden rounded cursor-pointer aspect-[4/5]"
             >
               <img
                 src={img.src}
                 alt={img.alt}
+                loading="lazy"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

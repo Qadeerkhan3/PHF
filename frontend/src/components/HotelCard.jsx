@@ -2,15 +2,18 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const HotelCard = ({ hotel }) => {
-  const minPrice = Math.min(...hotel.roomTypes.map(r => r.price));
+  const minPrice = hotel.roomTypes && hotel.roomTypes.length > 0
+    ? Math.min(...hotel.roomTypes.map(r => r.price))
+    : 0;
 
   return (
     <Link to={`/hotel/${hotel._id}`} className="block group">
-      <div className="bg-white rounded-lg overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300">
+      <div className="bg-white rounded-lg overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-500">
         <div className="relative h-56 overflow-hidden">
           <img
             src={hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'}
             alt={hotel.name}
+            loading="lazy"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
           />
           {hotel.coupleFriendly && (
