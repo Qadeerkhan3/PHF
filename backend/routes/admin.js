@@ -2,61 +2,122 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator');
 const Admin = require('../models/Admin');
 const Hotel = require('../models/Hotel');
 const Lead = require('../models/Lead');
 
-// Login
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const admin = await Admin.findOne({ email });
-    if (!admin) return res.status(400).json({ error: 'Admin not found' });
-    
-    const valid = await bcrypt.compare(password, admin.password);
-    if (!valid) return res.status(400).json({ error: 'Invalid password' });
-    
-    const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, admin: { email: admin.email } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ─── Login (with validation) ───
+router.post(
+  '/login',
+  [
+    body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
+    body('password').isLength({ min: 6 }).withMessage('Password must be 6+ chars')
+  ],
+  async (req, res) => {
+    // Validation errors check
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array()[0].msg });
+    }
 
-// Auth middleware
+    try {
+      const { email, password } = req.body;
+
+      // Timing attack se bachne ke liye generic message
+      const admin = await Admin.findOne({ email });
+      if (!admin) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const valid = await bcrypt.compare(password, admin.password);
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const token = jwt.sign(
+        { id: admin._id, email: admin.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      res.json({
+        token,
+        admin: { email: admin.email }
+      });
+    } catch (err) {
+      console.error('Login error:', err);
+      res.status(500).json({ error: 'Login failed' });
+    }
+  }
+);
+
+// ─── Auth middleware ───
 const auth = (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'No token' });
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.adminId = decoded.id;
+    req.adminEmail = decoded.email;
     next();
   } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Session expired, please login again' });
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 };
 
-// Get all hotels
-router.get('/hotels', auth, async (req, res) => {
-  const hotels = await Hotel.find().sort({ createdAt: -1 });
-  res.json(hotels);
-});
+// ─── Hotels ───
 
-// Add hotel
-router.post('/hotels', auth, async (req, res) => {
+// Get all hotels (admin)
+router.get('/hotels', auth, async (req, res) => {
   try {
-    const hotel = new Hotel(req.body);
-    await hotel.save();
-    res.status(201).json(hotel);
+    const hotels = await Hotel.find().sort({ createdAt: -1 });
+    res.json(hotels);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Edit hotel
+// Add hotel (with validation)
+router.post(
+  '/hotels',
+  auth,
+  [
+    body('name').trim().isLength({ min: 2, max: 100 }).withMessage('Hotel name 2-100 chars'),
+    body('phone').trim().isLength({ min: 7, max: 20 }).withMessage('Valid phone required'),
+    body('whatsapp').trim().isLength({ min: 7, max: 20 }).withMessage('Valid WhatsApp required'),
+    body('address').trim().isLength({ min: 5, max: 200 }).withMessage('Address 5-200 chars'),
+    body('location.coordinates').isArray({ min: 2, max: 2 }).withMessage('Location coordinates required')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array()[0].msg });
+    }
+
+    try {
+      const hotel = new Hotel(req.body);
+      await hotel.save();
+      res.status(201).json(hotel);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Update hotel
 router.put('/hotels/:id', auth, async (req, res) => {
   try {
-    const hotel = await Hotel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const hotel = await Hotel.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    });
+    if (!hotel) return res.status(404).json({ error: 'Hotel not found' });
     res.json(hotel);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -65,31 +126,54 @@ router.put('/hotels/:id', auth, async (req, res) => {
 
 // Delete hotel
 router.delete('/hotels/:id', auth, async (req, res) => {
-  await Hotel.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Deleted' });
+  try {
+    const hotel = await Hotel.findByIdAndDelete(req.params.id);
+    if (!hotel) return res.status(404).json({ error: 'Hotel not found' });
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Get all leads
+// ─── Leads ───
+
 router.get('/leads', auth, async (req, res) => {
-  const leads = await Lead.find().sort({ createdAt: -1 });
-  res.json(leads);
+  try {
+    const leads = await Lead.find().sort({ createdAt: -1 });
+    res.json(leads);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Update lead status
 router.put('/leads/:id', auth, async (req, res) => {
-  const lead = await Lead.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
-  res.json(lead);
+  try {
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { status: req.body.status },
+      { new: true, runValidators: true }
+    );
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    res.json(lead);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Analytics
+// ─── Analytics ───
+
 router.get('/analytics', auth, async (req, res) => {
-  const totalHotels = await Hotel.countDocuments();
-  const totalLeads = await Lead.countDocuments();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const leadsToday = await Lead.countDocuments({ createdAt: { $gte: today } });
-  
-  res.json({ totalHotels, totalLeads, leadsToday });
+  try {
+    const totalHotels = await Hotel.countDocuments();
+    const totalLeads = await Lead.countDocuments();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const leadsToday = await Lead.countDocuments({ createdAt: { $gte: today } });
+
+    res.json({ totalHotels, totalLeads, leadsToday });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

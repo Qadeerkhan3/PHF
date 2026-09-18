@@ -3,18 +3,41 @@ import React, { useState } from 'react';
 const Contact = () => {
   const [form, setForm] = useState({ name: '', email: '', message: '' });
   const [submitted, setSubmitted] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Yahan backend API call karo (agar bana lo)
-    console.log('Form submitted:', form);
+
+    // WhatsApp par message bhejo (pre-filled)
+    const whatsappMessage = `Assalam o Alaikum,%0A%0AName: ${form.name}%0AEmail: ${form.email}%0A%0AMessage: ${form.message}`;
+    window.open(`https://wa.me/923351092493?text=${whatsappMessage}`, '_blank');
+
+    showToast('WhatsApp khul raha hai... Message bhejein.', 'success');
     setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
     setForm({ name: '', email: '', message: '' });
+    setTimeout(() => setSubmitted(false), 3000);
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] pt-32 pb-24">
+    <div className="min-h-screen bg-[#FAF8F5] pt-32 pb-24 relative">
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed top-24 right-6 z-50 px-6 py-4 rounded shadow-lg transition-all duration-300 ${
+            toast.type === 'success'
+              ? 'bg-teal-700 text-white'
+              : 'bg-red-600 text-white'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto px-6">
         <p className="text-xs tracking-[0.2em] text-gray-500 mb-4">
           GET IN TOUCH
@@ -73,28 +96,22 @@ const Contact = () => {
                 type="submit"
                 className="bg-teal-700 hover:bg-teal-800 text-white px-8 py-3 rounded text-sm transition-colors"
               >
-                Send message
+                Send via WhatsApp
               </button>
-
-              {submitted && (
-                <p className="text-sm text-green-700">
-                  ✓ Message sent. We'll get back to you soon.
-                </p>
-              )}
             </form>
           </div>
 
-          {/* Contact Info */}
+          {/* Contact Info — REAL */}
           <div className="space-y-8">
             <div>
               <p className="text-xs tracking-[0.15em] uppercase text-gray-500 mb-2">
                 Email
               </p>
               <a
-                href="mailto:hello@peshawarhotelfinder.com"
+                href="mailto:qadeeru89@gmail.com"
                 className="text-gray-800 hover:text-teal-700 transition"
               >
-                hello@peshawarhotelfinder.com
+                qadeeru89@gmail.com
               </a>
             </div>
 
@@ -103,12 +120,12 @@ const Contact = () => {
                 WhatsApp
               </p>
               <a
-                href="https://wa.me/923338974965"
+                href="https://wa.me/923351092493"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-800 hover:text-teal-700 transition"
               >
-                +92 333 8974965
+                +92 335 1092493
               </a>
             </div>
 
@@ -125,10 +142,18 @@ const Contact = () => {
               <p className="text-xs tracking-[0.15em] uppercase text-gray-500 mb-2">
                 Hotel Owners
               </p>
-              <p className="text-gray-600 text-sm leading-relaxed">
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">
                 Want to list your hotel? Send us a message with your hotel name
                 and contact details. Listing is free.
               </p>
+              <a
+                href="https://wa.me/923351092493?text=Assalam%20o%20Alaikum%2C%20mujhe%20apna%20hotel%20list%20karwana%20hai."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-700 hover:text-teal-800 text-sm font-medium transition"
+              >
+                Message on WhatsApp →
+              </a>
             </div>
           </div>
         </div>
