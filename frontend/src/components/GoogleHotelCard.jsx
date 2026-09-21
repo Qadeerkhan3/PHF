@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const GoogleHotelCard = ({ place }) => {
   const name = place.displayName?.text || 'Unknown Hotel';
@@ -8,17 +9,14 @@ const GoogleHotelCard = ({ place }) => {
   const phone = place.internationalPhoneNumber;
   const photoName = place.photos?.[0]?.name;
 
-  const mapsLink = `https://www.google.com/maps/place/?q=place_id:${place.id}`;
-
   const photoUrl = photoName
     ? `http://localhost:5000/api/hotels/photo-proxy?name=${encodeURIComponent(photoName)}`
     : null;
 
   return (
-    <a
-      href={mapsLink}
-      target="_blank"
-      rel="noopener noreferrer"
+    <Link
+      to={`/google-hotel/${place.id}`}
+      state={{ place }}
       className="group block bg-white rounded-lg overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300"
     >
       <div className="relative h-56 overflow-hidden bg-gradient-to-br from-teal-50 to-amber-50">
@@ -66,16 +64,14 @@ const GoogleHotelCard = ({ place }) => {
         </h3>
         <p className="text-sm text-gray-500 mb-3 line-clamp-2">{address}</p>
 
-        {phone && (
-          <p className="text-xs text-gray-400 mb-3">📞 {phone}</p>
-        )}
+        {phone && <p className="text-xs text-gray-400 mb-3">📞 {phone}</p>}
 
         <div className="flex items-center justify-between pt-3 border-t border-gray-100">
           <span className="text-xs text-gray-400">
             {reviewCount ? `${reviewCount} reviews` : 'On Google Maps'}
           </span>
           <span className="text-xs text-teal-700 group-hover:underline flex items-center gap-1">
-            View on Maps
+            View details
             <svg
               width="12"
               height="12"
@@ -89,7 +85,7 @@ const GoogleHotelCard = ({ place }) => {
           </span>
         </div>
       </div>
-    </a>
+    </Link>
   );
 };
 

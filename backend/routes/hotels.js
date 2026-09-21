@@ -60,7 +60,7 @@ router.get("/nearby-google", async (req, res) => {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY,
           "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.photos,places.location,places.internationalPhoneNumber",
+            "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.photos,places.location,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri",
         },
       },
     );
