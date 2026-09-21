@@ -1,15 +1,19 @@
 import React, { useEffect, useState, useRef } from 'react';
+import axios from 'axios';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import HotelCard from '../components/HotelCard';
+import GoogleHotelCard from '../components/GoogleHotelCard';
 import LocationModal from '../components/LocationModal';
 import { getNearbyHotels } from '../services/api';
 
 gsap.registerPlugin(ScrollTrigger);
 
 const Home = () => {
-  const [hotels, setHotels] = useState([]);
+  const [dbHotels, setDbHotels] = useState([]);
+  const [googleHotels, setGoogleHotels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [location, setLocation] = useState({
     lat: 34.0151,
     lng: 71.5249,
@@ -19,22 +23,59 @@ const Home = () => {
 
   const heroRef = useRef(null);
   const hotelsRef = useRef(null);
+  const googleRef = useRef(null);
   const stepsRef = useRef(null);
   const testimonialRef = useRef(null);
 
+  // Fetch from both sources
   useEffect(() => {
-    const fetchHotels = async () => {
+    const fetchAll = async () => {
       setLoading(true);
+      setLoadingGoogle(true);
+
+      // 1. DB hotels
       try {
-        const res = await getNearbyHotels(location.lat, location.lng, radius);
-        setHotels(res.data);
+        const dbRes = await getNearbyHotels(location.lat, location.lng, radius);
+        setDbHotels(dbRes.data);
+
+        // 2. Google hotels
+        try {
+          const googleRes = await axios.get(
+            `http://localhost:5000/api/hotels/nearby-google?lat=${location.lat}&lng=${location.lng}&radius=${radius}`
+          );
+
+          // Duplicates remove (name comparison)
+          const dbNames = new Set(
+            dbRes.data.map((h) => h.name.toLowerCase().trim())
+          );
+
+          const uniqueGoogle = (googleRes.data || []).filter((gh) => {
+            const gName = gh.displayName?.text?.toLowerCase().trim();
+            if (!gName) return false;
+
+            for (const dbName of dbNames) {
+              if (gName.includes(dbName) || dbName.includes(gName)) {
+                return false;
+              }
+            }
+            return true;
+          });
+
+          setGoogleHotels(uniqueGoogle);
+        } catch (err) {
+          console.error('Google fetch failed:', err);
+          setGoogleHotels([]);
+        } finally {
+          setLoadingGoogle(false);
+        }
       } catch (err) {
-        console.error('Error fetching hotels:', err);
+        console.error('DB fetch failed:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchHotels();
+
+    fetchAll();
   }, [location, radius]);
 
   // Hero animations
@@ -61,14 +102,33 @@ const Home = () => {
         delay: 0.7,
         ease: 'power2.out'
       });
+      gsap.from('.hero-divider', {
+        scaleX: 0,
+        opacity: 0,
+        duration: 1,
+        delay: 1,
+        ease: 'power2.out'
+      });
+
+      gsap.to('.hero-bg', {
+        scale: 1.1,
+        duration: 12,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: heroRef.current,
+          start: 'top top',
+          end: 'bottom top',
+          scrub: 1
+        }
+      });
     }, heroRef);
 
     return () => ctx.revert();
   }, []);
 
-  // Hotels stagger
+  // DB hotels stagger
   useEffect(() => {
-    if (!loading && hotels.length > 0) {
+    if (!loading && dbHotels.length > 0) {
       const ctx = gsap.context(() => {
         gsap.from('.hotel-card-item', {
           y: 40,
@@ -83,10 +143,30 @@ const Home = () => {
           }
         });
       }, hotelsRef);
-
       return () => ctx.revert();
     }
-  }, [loading, hotels]);
+  }, [loading, dbHotels]);
+
+  // Google hotels stagger
+  useEffect(() => {
+    if (!loadingGoogle && googleHotels.length > 0) {
+      const ctx = gsap.context(() => {
+        gsap.from('.google-card-item', {
+          y: 40,
+          opacity: 0,
+          duration: 0.6,
+          stagger: 0.1,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: googleRef.current,
+            start: 'top 80%',
+            toggleActions: 'play none none none'
+          }
+        });
+      }, googleRef);
+      return () => ctx.revert();
+    }
+  }, [loadingGoogle, googleHotels]);
 
   // Steps
   useEffect(() => {
@@ -104,7 +184,6 @@ const Home = () => {
         }
       });
     }, stepsRef);
-
     return () => ctx.revert();
   }, []);
 
@@ -123,7 +202,6 @@ const Home = () => {
         }
       });
     }, testimonialRef);
-
     return () => ctx.revert();
   }, []);
 
@@ -132,52 +210,57 @@ const Home = () => {
       <LocationModal onLocationSet={setLocation} />
 
       {/* ═══════════════════════════════════════ */}
-      {/* HERO — Warm tinted background          */}
+      {/* HERO                                    */}
       {/* ═══════════════════════════════════════ */}
       <section
         ref={heroRef}
-        className="relative px-6 pt-40 pb-24 text-center overflow-hidden"
+        className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden"
       >
-        {/* Decorative background shapes */}
-        <div className="absolute top-20 -left-40 w-96 h-96 bg-teal-700/5 rounded-full blur-3xl" />
-        <div className="absolute top-40 -right-40 w-96 h-96 bg-amber-600/5 rounded-full blur-3xl" />
+        <div className="absolute inset-0">
+          <img
+            src="https://images.unsplash.com/photo-1599661046289-e31897846e41?w=1920&q=80"
+            alt="Peshawar"
+            className="hero-bg w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/50 to-black/80" />
+          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#FAF8F5] to-transparent" />
+        </div>
 
-        <div className="relative max-w-4xl mx-auto">
-          <p className="hero-eyebrow text-xs tracking-[0.3em] text-teal-700 mb-6 font-medium">
+        <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
+          <p className="hero-eyebrow text-xs tracking-[0.3em] text-teal-300 mb-6 font-medium">
             THE CITY OF HOSPITALITY
           </p>
-          <h1 className="hero-title font-serif text-5xl md:text-7xl text-gray-900 mb-8 leading-[1.05]">
+          <h1 className="hero-title font-serif text-4xl md:text-6xl lg:text-7xl text-white mb-8 leading-[1.05]">
             Stay somewhere<br />worth remembering.
           </h1>
-          <p className="hero-subtitle text-lg text-gray-600 leading-relaxed max-w-xl mx-auto">
-            Your trusted guide to Peshawar's finest stays. Compare real prices,
-            discover welcoming spaces, and book directly.
+          <p className="hero-subtitle text-base md:text-lg text-gray-200 leading-relaxed max-w-xl mx-auto">
+            Your trusted guide to Peshawar's finest stays. Compare real
+            prices, discover welcoming spaces, and book directly.
           </p>
 
-          {/* Divider */}
-          <div className="mt-12 flex items-center justify-center gap-3">
-            <div className="w-12 h-px bg-gray-400" />
-            <div className="w-2 h-2 rounded-full bg-teal-700" />
-            <div className="w-12 h-px bg-gray-400" />
+          <div className="hero-divider mt-12 flex items-center justify-center gap-3">
+            <div className="w-16 h-px bg-white/40" />
+            <div className="w-2 h-2 rounded-full bg-teal-400" />
+            <div className="w-16 h-px bg-white/40" />
           </div>
+        </div>
+
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 hidden md:flex flex-col items-center gap-2 text-white/60">
+          <span className="text-xs tracking-[0.2em] uppercase">Scroll</span>
+          <svg width="16" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+          </svg>
         </div>
       </section>
 
       {/* ═══════════════════════════════════════ */}
-      {/* LOCATION BAR — Card style              */}
+      {/* LOCATION BAR                            */}
       {/* ═══════════════════════════════════════ */}
-      <section className="px-6 max-w-4xl mx-auto pb-16">
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+      <section className="px-6 max-w-4xl mx-auto -mt-12 relative z-20 pb-16">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-teal-700/10 flex items-center justify-center">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#0F766E"
-                strokeWidth="2"
-              >
+            <div className="w-10 h-10 rounded-full bg-teal-700/10 flex items-center justify-center shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F766E" strokeWidth="2">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                 <circle cx="12" cy="10" r="3" />
               </svg>
@@ -195,7 +278,7 @@ const Home = () => {
           <div className="hidden md:block w-px h-12 bg-gray-200" />
 
           <div className="flex items-center gap-4">
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 whitespace-nowrap">
               Within {(radius / 1000).toFixed(1)}km
             </span>
             <input
@@ -213,13 +296,13 @@ const Home = () => {
       </section>
 
       {/* ═══════════════════════════════════════ */}
-      {/* HOTELS GRID                            */}
+      {/* SECTION 1: DB HOTELS                    */}
       {/* ═══════════════════════════════════════ */}
-      <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-24">
+      <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-16">
         <div className="flex items-end justify-between mb-12">
           <div>
             <p className="text-xs tracking-[0.2em] text-teal-700 mb-3 font-medium">
-              A GOOD PLACE TO BEGIN
+              BOOK DIRECTLY
             </p>
             <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
               Stays with a sense<br />of place.
@@ -227,14 +310,14 @@ const Home = () => {
           </div>
           <div className="hidden md:block">
             <p className="text-sm text-gray-500">
-              {hotels.length} {hotels.length === 1 ? 'stay' : 'stays'} nearby
+              {dbHotels.length} {dbHotels.length === 1 ? 'stay' : 'stays'} on our platform
             </p>
           </div>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+            {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
                 <div className="bg-gray-200 h-56 rounded-lg mb-4"></div>
                 <div className="bg-gray-200 h-6 rounded w-3/4 mb-2"></div>
@@ -242,16 +325,14 @@ const Home = () => {
               </div>
             ))}
           </div>
-        ) : hotels.length === 0 ? (
-          <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
-            <p className="text-gray-500 mb-2">No hotels found in this area.</p>
-            <p className="text-sm text-gray-400">
-              Try increasing the radius.
-            </p>
+        ) : dbHotels.length === 0 ? (
+          <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
+            <p className="text-gray-500 mb-2">No platform hotels in this area.</p>
+            <p className="text-sm text-gray-400">Try increasing the radius.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {hotels.map((hotel) => (
+            {dbHotels.map((hotel) => (
               <div key={hotel._id} className="hotel-card-item">
                 <HotelCard hotel={hotel} />
               </div>
@@ -261,13 +342,64 @@ const Home = () => {
       </section>
 
       {/* ═══════════════════════════════════════ */}
-      {/* HOW IT WORKS — Dark section            */}
+      {/* SECTION 2: GOOGLE HOTELS                */}
+      {/* ═══════════════════════════════════════ */}
+      {(loadingGoogle || googleHotels.length > 0) && (
+        <section
+          ref={googleRef}
+          className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
+        >
+          <div className="flex items-end justify-between mb-12">
+            <div>
+              <p className="text-xs tracking-[0.2em] text-amber-600 mb-3 font-medium">
+                DISCOVER MORE
+              </p>
+              <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
+                More stays nearby.
+              </h2>
+              <p className="text-sm text-gray-500 mt-4 max-w-xl">
+                These hotels are on Google Maps but not yet on our platform.
+                Click to view details, ratings, and photos on Google.
+              </p>
+            </div>
+            {!loadingGoogle && (
+              <div className="hidden md:block">
+                <p className="text-sm text-gray-500">
+                  {googleHotels.length} found on Google
+                </p>
+              </div>
+            )}
+          </div>
+
+          {loadingGoogle ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="bg-gray-200 h-56 rounded-lg mb-4"></div>
+                  <div className="bg-gray-200 h-6 rounded w-3/4 mb-2"></div>
+                  <div className="bg-gray-200 h-4 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {googleHotels.map((place) => (
+                <div key={place.id} className="google-card-item">
+                  <GoogleHotelCard place={place} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ═══════════════════════════════════════ */}
+      {/* HOW IT WORKS                            */}
       {/* ═══════════════════════════════════════ */}
       <section
         ref={stepsRef}
         className="px-6 py-24 bg-gray-900 text-white relative overflow-hidden"
       >
-        {/* Decorative circle */}
         <div className="absolute -top-40 -right-40 w-96 h-96 border border-teal-700/20 rounded-full" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 border border-teal-700/10 rounded-full" />
 
@@ -283,24 +415,20 @@ const Home = () => {
             <div className="step-item">
               <p className="font-serif text-7xl text-teal-700/40 mb-6">01</p>
               <div className="w-10 h-px bg-teal-500 mb-6" />
-              <h3 className="font-serif text-2xl mb-3">
-                Choose your area
-              </h3>
+              <h3 className="font-serif text-2xl mb-3">Choose your area</h3>
               <p className="text-gray-400 leading-relaxed">
-                Tell us where you want to be, or let your location guide you to
-                nearby stays.
+                Tell us where you want to be, or let your location guide you
+                to nearby stays.
               </p>
             </div>
 
             <div className="step-item">
               <p className="font-serif text-7xl text-teal-700/40 mb-6">02</p>
               <div className="w-10 h-px bg-teal-500 mb-6" />
-              <h3 className="font-serif text-2xl mb-3">
-                Compare with confidence
-              </h3>
+              <h3 className="font-serif text-2xl mb-3">Compare with confidence</h3>
               <p className="text-gray-400 leading-relaxed">
-                Browse real prices, honest details, and the local knowledge you
-                need.
+                Browse real prices, honest details, and the local knowledge
+                you need.
               </p>
             </div>
 
@@ -309,8 +437,8 @@ const Home = () => {
               <div className="w-10 h-px bg-teal-500 mb-6" />
               <h3 className="font-serif text-2xl mb-3">Book directly</h3>
               <p className="text-gray-400 leading-relaxed">
-                Message your chosen hotel on WhatsApp. No middlemen, no hidden
-                fees.
+                Message your chosen hotel on WhatsApp. No middlemen, no
+                hidden fees.
               </p>
             </div>
           </div>
@@ -318,12 +446,9 @@ const Home = () => {
       </section>
 
       {/* ═══════════════════════════════════════ */}
-      {/* TESTIMONIAL — Cream card               */}
+      {/* TESTIMONIAL                             */}
       {/* ═══════════════════════════════════════ */}
-      <section
-        ref={testimonialRef}
-        className="px-6 py-24 bg-[#FAF8F5]"
-      >
+      <section ref={testimonialRef} className="px-6 py-24 bg-[#FAF8F5]">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
             <p className="text-xs tracking-[0.2em] text-teal-700 mb-3 font-medium">
@@ -335,7 +460,6 @@ const Home = () => {
           </div>
 
           <div className="testimonial-content bg-white border border-gray-200 rounded-2xl p-10 md:p-16 shadow-sm relative">
-            {/* Quote mark */}
             <div className="absolute -top-6 left-10 text-8xl text-teal-700/20 font-serif leading-none">
               "
             </div>
@@ -362,14 +486,15 @@ const Home = () => {
       </section>
 
       {/* ═══════════════════════════════════════ */}
-      {/* FOR HOTEL OWNERS — Teal CTA            */}
+      {/* FOR HOTEL OWNERS                        */}
       {/* ═══════════════════════════════════════ */}
       <section className="px-6 py-24 bg-gradient-to-br from-teal-800 via-teal-700 to-teal-600 text-white relative overflow-hidden">
-        {/* Decorative pattern */}
         <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-0 left-0 w-full h-full"
+          <div
+            className="absolute top-0 left-0 w-full h-full"
             style={{
-              backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+              backgroundImage:
+                'radial-gradient(circle, white 1px, transparent 1px)',
               backgroundSize: '40px 40px'
             }}
           />
