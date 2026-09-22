@@ -1,19 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import HotelCard from '../components/HotelCard';
 import GoogleHotelCard from '../components/GoogleHotelCard';
 import LocationModal from '../components/LocationModal';
-import { getNearbyHotels } from '../services/api';
+import { getNearbyHotels, getNearbyGoogleHotels } from '../services/api';
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Peshawar city center
 const PESHAWAR_LAT = 34.0151;
 const PESHAWAR_LNG = 71.5249;
 
-// Haversine formula — do coordinates ke beech distance (km)
 const getDistanceKm = (lat1, lng1, lat2, lng2) => {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -46,24 +43,18 @@ const Home = () => {
   const stepsRef = useRef(null);
   const testimonialRef = useRef(null);
 
-  // Check karo ke user Peshawar ke aas paas hai ya nahi (50km radius)
   const isUserInPeshawar =
     getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
 
-  // Fetch from both sources
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
 
-      // 1. DB hotels — sirf agar user Peshawar mein hai
+      // 1. DB hotels — sirf Peshawar mein
       if (isUserInPeshawar) {
         try {
-          const dbRes = await getNearbyHotels(
-            location.lat,
-            location.lng,
-            radius
-          );
+          const dbRes = await getNearbyHotels(location.lat, location.lng, radius);
           setDbHotels(dbRes.data);
         } catch (err) {
           console.error('DB fetch failed:', err);
@@ -76,11 +67,12 @@ const Home = () => {
 
       // 2. Google hotels — har jagah
       try {
-        const googleRes = await axios.get(
-          `http://localhost:5000/api/hotels/nearby-google?lat=${location.lat}&lng=${location.lng}&radius=${radius}`
+        const googleRes = await getNearbyGoogleHotels(
+          location.lat,
+          location.lng,
+          radius
         );
 
-        // Duplicates remove (agar DB hotels hain toh)
         const dbNames = new Set(
           (isUserInPeshawar ? dbHotels : []).map((h) =>
             h.name.toLowerCase().trim()
@@ -113,34 +105,10 @@ const Home = () => {
   // Hero animations
   useEffect(() => {
     const ctx = gsap.context(() => {
-      gsap.from('.hero-eyebrow', {
-        y: 20,
-        opacity: 0,
-        duration: 0.8,
-        delay: 0.2,
-        ease: 'power2.out'
-      });
-      gsap.from('.hero-title', {
-        y: 40,
-        opacity: 0,
-        duration: 1,
-        delay: 0.4,
-        ease: 'power2.out'
-      });
-      gsap.from('.hero-subtitle', {
-        y: 20,
-        opacity: 0,
-        duration: 0.8,
-        delay: 0.7,
-        ease: 'power2.out'
-      });
-      gsap.from('.hero-divider', {
-        scaleX: 0,
-        opacity: 0,
-        duration: 1,
-        delay: 1,
-        ease: 'power2.out'
-      });
+      gsap.from('.hero-eyebrow', { y: 20, opacity: 0, duration: 0.8, delay: 0.2 });
+      gsap.from('.hero-title', { y: 40, opacity: 0, duration: 1, delay: 0.4 });
+      gsap.from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.8, delay: 0.7 });
+      gsap.from('.hero-divider', { scaleX: 0, opacity: 0, duration: 1, delay: 1 });
       gsap.to('.hero-bg', {
         scale: 1.1,
         duration: 12,
@@ -156,7 +124,6 @@ const Home = () => {
     return () => ctx.revert();
   }, []);
 
-  // DB hotels stagger
   useEffect(() => {
     if (!loading && dbHotels.length > 0 && hotelsRef.current) {
       const ctx = gsap.context(() => {
@@ -165,11 +132,9 @@ const Home = () => {
           opacity: 0,
           duration: 0.6,
           stagger: 0.1,
-          ease: 'power2.out',
           scrollTrigger: {
             trigger: hotelsRef.current,
-            start: 'top 80%',
-            toggleActions: 'play none none none'
+            start: 'top 80%'
           }
         });
       }, hotelsRef);
@@ -177,7 +142,6 @@ const Home = () => {
     }
   }, [loading, dbHotels]);
 
-  // Google hotels stagger
   useEffect(() => {
     if (!loadingGoogle && googleHotels.length > 0 && googleRef.current) {
       const ctx = gsap.context(() => {
@@ -186,11 +150,9 @@ const Home = () => {
           opacity: 0,
           duration: 0.6,
           stagger: 0.1,
-          ease: 'power2.out',
           scrollTrigger: {
             trigger: googleRef.current,
-            start: 'top 80%',
-            toggleActions: 'play none none none'
+            start: 'top 80%'
           }
         });
       }, googleRef);
@@ -198,7 +160,6 @@ const Home = () => {
     }
   }, [loadingGoogle, googleHotels]);
 
-  // Steps
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.step-item', {
@@ -206,30 +167,19 @@ const Home = () => {
         opacity: 0,
         duration: 0.8,
         stagger: 0.2,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: stepsRef.current,
-          start: 'top 75%',
-          toggleActions: 'play none none none'
-        }
+        scrollTrigger: { trigger: stepsRef.current, start: 'top 75%' }
       });
     }, stepsRef);
     return () => ctx.revert();
   }, []);
 
-  // Testimonial
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.testimonial-content', {
         y: 40,
         opacity: 0,
         duration: 0.8,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: testimonialRef.current,
-          start: 'top 80%',
-          toggleActions: 'play none none none'
-        }
+        scrollTrigger: { trigger: testimonialRef.current, start: 'top 80%' }
       });
     }, testimonialRef);
     return () => ctx.revert();
@@ -239,13 +189,8 @@ const Home = () => {
     <div className="min-h-screen bg-[#FAF8F5]">
       <LocationModal onLocationSet={setLocation} />
 
-      {/* ═══════════════════════════════════════ */}
-      {/* HERO                                    */}
-      {/* ═══════════════════════════════════════ */}
-      <section
-        ref={heroRef}
-        className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden"
-      >
+      {/* HERO */}
+      <section ref={heroRef} className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img
             src="https://images.unsplash.com/photo-1599661046289-e31897846e41?w=1920&q=80"
@@ -264,28 +209,18 @@ const Home = () => {
             Stay somewhere<br />worth remembering.
           </h1>
           <p className="hero-subtitle text-base md:text-lg text-gray-200 leading-relaxed max-w-xl mx-auto">
-            Your trusted guide to Peshawar's finest stays. Compare real
-            prices, discover welcoming spaces, and book directly.
+            Your trusted guide to Peshawar's finest stays. Compare real prices,
+            discover welcoming spaces, and book directly.
           </p>
-
           <div className="hero-divider mt-12 flex items-center justify-center gap-3">
             <div className="w-16 h-px bg-white/40" />
             <div className="w-2 h-2 rounded-full bg-teal-400" />
             <div className="w-16 h-px bg-white/40" />
           </div>
         </div>
-
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 hidden md:flex flex-col items-center gap-2 text-white/60">
-          <span className="text-xs tracking-[0.2em] uppercase">Scroll</span>
-          <svg width="16" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M12 5v14M19 12l-7 7-7-7" />
-          </svg>
-        </div>
       </section>
 
-      {/* ═══════════════════════════════════════ */}
-      {/* LOCATION BAR                            */}
-      {/* ═══════════════════════════════════════ */}
+      {/* LOCATION BAR */}
       <section className="px-6 max-w-4xl mx-auto -mt-12 relative z-20 pb-16">
         <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
@@ -299,17 +234,13 @@ const Home = () => {
               <p className="text-xs tracking-[0.15em] uppercase text-gray-500 mb-1">
                 Your location
               </p>
-              <p className="text-sm font-medium text-gray-900">
-                {location.label}
-              </p>
+              <p className="text-sm font-medium text-gray-900">{location.label}</p>
               <p className="text-xs text-gray-400 mt-0.5">
                 {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
               </p>
             </div>
           </div>
-
           <div className="hidden md:block w-px h-12 bg-gray-200" />
-
           <div className="flex items-center gap-4">
             <span className="text-xs text-gray-500 whitespace-nowrap">
               Within {(radius / 1000).toFixed(1)}km
@@ -328,9 +259,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════ */}
-      {/* SECTION 1: DB HOTELS (Only Peshawar)    */}
-      {/* ═══════════════════════════════════════ */}
+      {/* DB HOTELS */}
       {isUserInPeshawar ? (
         <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-16">
           <div className="flex items-end justify-between mb-12">
@@ -344,8 +273,7 @@ const Home = () => {
             </div>
             <div className="hidden md:block">
               <p className="text-sm text-gray-500">
-                {dbHotels.length} {dbHotels.length === 1 ? 'stay' : 'stays'} on
-                our platform
+                {dbHotels.length} {dbHotels.length === 1 ? 'stay' : 'stays'} on our platform
               </p>
             </div>
           </div>
@@ -362,12 +290,8 @@ const Home = () => {
             </div>
           ) : dbHotels.length === 0 ? (
             <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
-              <p className="text-gray-500 mb-2">
-                No platform hotels in this area.
-              </p>
-              <p className="text-sm text-gray-400">
-                Try increasing the radius.
-              </p>
+              <p className="text-gray-500 mb-2">No platform hotels in this area.</p>
+              <p className="text-sm text-gray-400">Try increasing the radius.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -380,18 +304,10 @@ const Home = () => {
           )}
         </section>
       ) : (
-        /* Not in Peshawar — friendly message */
         <section className="px-6 max-w-4xl mx-auto pb-16">
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-10 md:p-12 text-center">
             <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#D97706"
-                strokeWidth="2"
-              >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                 <circle cx="12" cy="10" r="3" />
               </svg>
@@ -403,10 +319,7 @@ const Home = () => {
               We're not in your city yet.
             </h2>
             <p className="text-gray-600 max-w-lg mx-auto mb-6 leading-relaxed">
-              Peshawar Hotel Finder's curated listings are currently only
-              available in Peshawar. We're working to expand to more cities
-              soon. In the meantime, explore hotels discovered nearby via
-              Google Maps below.
+              Peshawar Hotel Finder's curated listings are currently only available in Peshawar. We're working to expand to more cities soon. In the meantime, explore hotels discovered nearby via Google Maps below.
             </p>
             <div className="inline-flex items-center gap-2 text-sm text-amber-800 bg-white/60 px-4 py-2 rounded-full">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -419,14 +332,9 @@ const Home = () => {
         </section>
       )}
 
-      {/* ═══════════════════════════════════════ */}
-      {/* SECTION 2: GOOGLE HOTELS (Everywhere)   */}
-      {/* ═══════════════════════════════════════ */}
+      {/* GOOGLE HOTELS */}
       {(loadingGoogle || googleHotels.length > 0) && (
-        <section
-          ref={googleRef}
-          className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
-        >
+        <section ref={googleRef} className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200">
           <div className="flex items-end justify-between mb-12">
             <div>
               <p className="text-xs tracking-[0.2em] text-amber-600 mb-3 font-medium">
@@ -436,15 +344,12 @@ const Home = () => {
                 {isUserInPeshawar ? 'More stays nearby.' : 'Hotels near you.'}
               </h2>
               <p className="text-sm text-gray-500 mt-4 max-w-xl">
-                Hotels around {location.label} — discovered via Google Maps.
-                Click to view details, ratings, and photos.
+                Hotels around {location.label} — discovered via Google Maps. Click to view details, ratings, and photos.
               </p>
             </div>
             {!loadingGoogle && (
               <div className="hidden md:block">
-                <p className="text-sm text-gray-500">
-                  {googleHotels.length} found nearby
-                </p>
+                <p className="text-sm text-gray-500">{googleHotels.length} found nearby</p>
               </div>
             )}
           </div>
@@ -461,12 +366,8 @@ const Home = () => {
             </div>
           ) : googleHotels.length === 0 ? (
             <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
-              <p className="text-gray-500 mb-2">
-                No hotels found in this area.
-              </p>
-              <p className="text-sm text-gray-400">
-                Try increasing the radius.
-              </p>
+              <p className="text-gray-500 mb-2">No hotels found in this area.</p>
+              <p className="text-sm text-gray-400">Try increasing the radius.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -480,16 +381,10 @@ const Home = () => {
         </section>
       )}
 
-      {/* ═══════════════════════════════════════ */}
-      {/* HOW IT WORKS                            */}
-      {/* ═══════════════════════════════════════ */}
-      <section
-        ref={stepsRef}
-        className="px-6 py-24 bg-gray-900 text-white relative overflow-hidden"
-      >
+      {/* HOW IT WORKS */}
+      <section ref={stepsRef} className="px-6 py-24 bg-gray-900 text-white relative overflow-hidden">
         <div className="absolute -top-40 -right-40 w-96 h-96 border border-teal-700/20 rounded-full" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 border border-teal-700/10 rounded-full" />
-
         <div className="relative max-w-6xl mx-auto">
           <p className="text-xs tracking-[0.2em] text-teal-400 mb-3 font-medium">
             SIMPLE BY DESIGN
@@ -497,26 +392,21 @@ const Home = () => {
           <h2 className="font-serif text-4xl md:text-5xl mb-16 leading-tight">
             Find your next stay<br />in three easy steps.
           </h2>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             <div className="step-item">
               <p className="font-serif text-7xl text-teal-700/40 mb-6">01</p>
               <div className="w-10 h-px bg-teal-500 mb-6" />
               <h3 className="font-serif text-2xl mb-3">Choose your area</h3>
               <p className="text-gray-400 leading-relaxed">
-                Tell us where you want to be, or let your location guide you
-                to nearby stays.
+                Tell us where you want to be, or let your location guide you to nearby stays.
               </p>
             </div>
             <div className="step-item">
               <p className="font-serif text-7xl text-teal-700/40 mb-6">02</p>
               <div className="w-10 h-px bg-teal-500 mb-6" />
-              <h3 className="font-serif text-2xl mb-3">
-                Compare with confidence
-              </h3>
+              <h3 className="font-serif text-2xl mb-3">Compare with confidence</h3>
               <p className="text-gray-400 leading-relaxed">
-                Browse real prices, honest details, and the local knowledge
-                you need.
+                Browse real prices, honest details, and the local knowledge you need.
               </p>
             </div>
             <div className="step-item">
@@ -524,17 +414,14 @@ const Home = () => {
               <div className="w-10 h-px bg-teal-500 mb-6" />
               <h3 className="font-serif text-2xl mb-3">Book directly</h3>
               <p className="text-gray-400 leading-relaxed">
-                Message your chosen hotel on WhatsApp. No middlemen, no hidden
-                fees.
+                Message your chosen hotel on WhatsApp. No middlemen, no hidden fees.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════ */}
-      {/* TESTIMONIAL                             */}
-      {/* ═══════════════════════════════════════ */}
+      {/* TESTIMONIAL */}
       <section ref={testimonialRef} className="px-6 py-24 bg-[#FAF8F5]">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
@@ -545,27 +432,21 @@ const Home = () => {
               Good stays. Good stories.
             </h2>
           </div>
-
           <div className="testimonial-content bg-white border border-gray-200 rounded-2xl p-10 md:p-16 shadow-sm relative">
-            <div className="absolute -top-6 left-10 text-8xl text-teal-700/20 font-serif leading-none">
-              "
-            </div>
+            <div className="absolute -top-6 left-10 text-8xl text-teal-700/20 font-serif leading-none">"</div>
             <p className="relative font-serif text-2xl md:text-3xl text-gray-800 italic leading-relaxed mb-10 text-center">
-              Finally, a simple way to find a clean, comfortable stay in the
-              city. The WhatsApp booking made everything effortless.
+              Finally, a simple way to find a clean, comfortable stay in the city. The WhatsApp booking made everything effortless.
             </p>
             <div className="flex items-center justify-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-full bg-teal-700 text-white flex items-center justify-center text-sm font-medium">
-                QK
+                AK
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
+                <p className="text-sm font-medium text-gray-900">Ayesha K.</p>
                 <p className="text-xs text-gray-500">Peshawar local</p>
               </div>
             </div>
-            <p className="text-amber-500 text-center text-sm tracking-widest">
-              ★★★★★
-            </p>
+            <p className="text-amber-500 text-center text-sm tracking-widest">★★★★★</p>
           </div>
         </div>
       </section>
@@ -576,8 +457,7 @@ const Home = () => {
           <div
             className="absolute top-0 left-0 w-full h-full"
             style={{
-              backgroundImage:
-                'radial-gradient(circle, white 1px, transparent 1px)',
+              backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
               backgroundSize: '40px 40px'
             }}
           />
@@ -590,8 +470,7 @@ const Home = () => {
             Have a place worth sharing?
           </h2>
           <p className="text-teal-50 max-w-lg mx-auto mb-10 leading-relaxed">
-            Put your hotel in front of travelers who are ready to discover
-            Peshawar. Listing is free, and our team is here to help.
+            Put your hotel in front of travelers who are ready to discover Peshawar. Listing is free, and our team is here to help.
           </p>
           <a
             href="https://wa.me/923351092493?text=Assalam%20o%20Alaikum%2C%20mujhe%20apna%20hotel%20Peshawar%20Hotel%20Finder%20par%20list%20karwana%20hai."
