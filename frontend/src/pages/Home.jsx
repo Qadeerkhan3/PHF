@@ -9,14 +9,33 @@ import { getNearbyHotels } from '../services/api';
 
 gsap.registerPlugin(ScrollTrigger);
 
+// Peshawar city center
+const PESHAWAR_LAT = 34.0151;
+const PESHAWAR_LNG = 71.5249;
+
+// Haversine formula — do coordinates ke beech distance (km)
+const getDistanceKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 const Home = () => {
   const [dbHotels, setDbHotels] = useState([]);
   const [googleHotels, setGoogleHotels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [location, setLocation] = useState({
-    lat: 34.0151,
-    lng: 71.5249,
+    lat: PESHAWAR_LAT,
+    lng: PESHAWAR_LNG,
     label: 'Peshawar City Center'
   });
   const [radius, setRadius] = useState(3000);
@@ -27,56 +46,69 @@ const Home = () => {
   const stepsRef = useRef(null);
   const testimonialRef = useRef(null);
 
+  // Check karo ke user Peshawar ke aas paas hai ya nahi (50km radius)
+  const isUserInPeshawar =
+    getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
+
   // Fetch from both sources
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
 
-      // 1. DB hotels
-      try {
-        const dbRes = await getNearbyHotels(location.lat, location.lng, radius);
-        setDbHotels(dbRes.data);
-
-        // 2. Google hotels
+      // 1. DB hotels — sirf agar user Peshawar mein hai
+      if (isUserInPeshawar) {
         try {
-          const googleRes = await axios.get(
-            `http://localhost:5000/api/hotels/nearby-google?lat=${location.lat}&lng=${location.lng}&radius=${radius}`
+          const dbRes = await getNearbyHotels(
+            location.lat,
+            location.lng,
+            radius
           );
-
-          // Duplicates remove (name comparison)
-          const dbNames = new Set(
-            dbRes.data.map((h) => h.name.toLowerCase().trim())
-          );
-
-          const uniqueGoogle = (googleRes.data || []).filter((gh) => {
-            const gName = gh.displayName?.text?.toLowerCase().trim();
-            if (!gName) return false;
-
-            for (const dbName of dbNames) {
-              if (gName.includes(dbName) || dbName.includes(gName)) {
-                return false;
-              }
-            }
-            return true;
-          });
-
-          setGoogleHotels(uniqueGoogle);
+          setDbHotels(dbRes.data);
         } catch (err) {
-          console.error('Google fetch failed:', err);
-          setGoogleHotels([]);
-        } finally {
-          setLoadingGoogle(false);
+          console.error('DB fetch failed:', err);
+          setDbHotels([]);
         }
+      } else {
+        setDbHotels([]);
+      }
+      setLoading(false);
+
+      // 2. Google hotels — har jagah
+      try {
+        const googleRes = await axios.get(
+          `http://localhost:5000/api/hotels/nearby-google?lat=${location.lat}&lng=${location.lng}&radius=${radius}`
+        );
+
+        // Duplicates remove (agar DB hotels hain toh)
+        const dbNames = new Set(
+          (isUserInPeshawar ? dbHotels : []).map((h) =>
+            h.name.toLowerCase().trim()
+          )
+        );
+
+        const uniqueGoogle = (googleRes.data || []).filter((gh) => {
+          const gName = gh.displayName?.text?.toLowerCase().trim();
+          if (!gName) return false;
+          for (const dbName of dbNames) {
+            if (gName.includes(dbName) || dbName.includes(gName)) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        setGoogleHotels(uniqueGoogle);
       } catch (err) {
-        console.error('DB fetch failed:', err);
+        console.error('Google fetch failed:', err);
+        setGoogleHotels([]);
       } finally {
-        setLoading(false);
+        setLoadingGoogle(false);
       }
     };
 
     fetchAll();
-  }, [location, radius]);
+  }, [location, radius, isUserInPeshawar]);
 
   // Hero animations
   useEffect(() => {
@@ -109,7 +141,6 @@ const Home = () => {
         delay: 1,
         ease: 'power2.out'
       });
-
       gsap.to('.hero-bg', {
         scale: 1.1,
         duration: 12,
@@ -122,13 +153,12 @@ const Home = () => {
         }
       });
     }, heroRef);
-
     return () => ctx.revert();
   }, []);
 
   // DB hotels stagger
   useEffect(() => {
-    if (!loading && dbHotels.length > 0) {
+    if (!loading && dbHotels.length > 0 && hotelsRef.current) {
       const ctx = gsap.context(() => {
         gsap.from('.hotel-card-item', {
           y: 40,
@@ -149,7 +179,7 @@ const Home = () => {
 
   // Google hotels stagger
   useEffect(() => {
-    if (!loadingGoogle && googleHotels.length > 0) {
+    if (!loadingGoogle && googleHotels.length > 0 && googleRef.current) {
       const ctx = gsap.context(() => {
         gsap.from('.google-card-item', {
           y: 40,
@@ -272,6 +302,9 @@ const Home = () => {
               <p className="text-sm font-medium text-gray-900">
                 {location.label}
               </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+              </p>
             </div>
           </div>
 
@@ -296,53 +329,98 @@ const Home = () => {
       </section>
 
       {/* ═══════════════════════════════════════ */}
-      {/* SECTION 1: DB HOTELS                    */}
+      {/* SECTION 1: DB HOTELS (Only Peshawar)    */}
       {/* ═══════════════════════════════════════ */}
-      <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-16">
-        <div className="flex items-end justify-between mb-12">
-          <div>
-            <p className="text-xs tracking-[0.2em] text-teal-700 mb-3 font-medium">
-              BOOK DIRECTLY
+      {isUserInPeshawar ? (
+        <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-16">
+          <div className="flex items-end justify-between mb-12">
+            <div>
+              <p className="text-xs tracking-[0.2em] text-teal-700 mb-3 font-medium">
+                BOOK DIRECTLY
+              </p>
+              <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
+                Stays with a sense<br />of place.
+              </h2>
+            </div>
+            <div className="hidden md:block">
+              <p className="text-sm text-gray-500">
+                {dbHotels.length} {dbHotels.length === 1 ? 'stay' : 'stays'} on
+                our platform
+              </p>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="bg-gray-200 h-56 rounded-lg mb-4"></div>
+                  <div className="bg-gray-200 h-6 rounded w-3/4 mb-2"></div>
+                  <div className="bg-gray-200 h-4 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : dbHotels.length === 0 ? (
+            <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
+              <p className="text-gray-500 mb-2">
+                No platform hotels in this area.
+              </p>
+              <p className="text-sm text-gray-400">
+                Try increasing the radius.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {dbHotels.map((hotel) => (
+                <div key={hotel._id} className="hotel-card-item">
+                  <HotelCard hotel={hotel} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        /* Not in Peshawar — friendly message */
+        <section className="px-6 max-w-4xl mx-auto pb-16">
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-10 md:p-12 text-center">
+            <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#D97706"
+                strokeWidth="2"
+              >
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+            </div>
+            <p className="text-xs tracking-[0.2em] text-amber-700 mb-3 font-medium">
+              NOT FOR YOUR CITY YET
             </p>
-            <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
-              Stays with a sense<br />of place.
+            <h2 className="font-serif text-3xl md:text-4xl text-gray-900 mb-4">
+              We're not in your city yet.
             </h2>
-          </div>
-          <div className="hidden md:block">
-            <p className="text-sm text-gray-500">
-              {dbHotels.length} {dbHotels.length === 1 ? 'stay' : 'stays'} on our platform
+            <p className="text-gray-600 max-w-lg mx-auto mb-6 leading-relaxed">
+              Peshawar Hotel Finder's curated listings are currently only
+              available in Peshawar. We're working to expand to more cities
+              soon. In the meantime, explore hotels discovered nearby via
+              Google Maps below.
             </p>
+            <div className="inline-flex items-center gap-2 text-sm text-amber-800 bg-white/60 px-4 py-2 rounded-full">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+              Your location: {location.label}
+            </div>
           </div>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse">
-                <div className="bg-gray-200 h-56 rounded-lg mb-4"></div>
-                <div className="bg-gray-200 h-6 rounded w-3/4 mb-2"></div>
-                <div className="bg-gray-200 h-4 rounded w-1/2"></div>
-              </div>
-            ))}
-          </div>
-        ) : dbHotels.length === 0 ? (
-          <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
-            <p className="text-gray-500 mb-2">No platform hotels in this area.</p>
-            <p className="text-sm text-gray-400">Try increasing the radius.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {dbHotels.map((hotel) => (
-              <div key={hotel._id} className="hotel-card-item">
-                <HotelCard hotel={hotel} />
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* ═══════════════════════════════════════ */}
-      {/* SECTION 2: GOOGLE HOTELS                */}
+      {/* SECTION 2: GOOGLE HOTELS (Everywhere)   */}
       {/* ═══════════════════════════════════════ */}
       {(loadingGoogle || googleHotels.length > 0) && (
         <section
@@ -352,20 +430,20 @@ const Home = () => {
           <div className="flex items-end justify-between mb-12">
             <div>
               <p className="text-xs tracking-[0.2em] text-amber-600 mb-3 font-medium">
-                DISCOVER MORE
+                {isUserInPeshawar ? 'DISCOVER MORE' : 'NEARBY HOTELS'}
               </p>
               <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
-                More stays nearby.
+                {isUserInPeshawar ? 'More stays nearby.' : 'Hotels near you.'}
               </h2>
               <p className="text-sm text-gray-500 mt-4 max-w-xl">
-                These hotels are on Google Maps but not yet on our platform.
-                Click to view details, ratings, and photos on Google.
+                Hotels around {location.label} — discovered via Google Maps.
+                Click to view details, ratings, and photos.
               </p>
             </div>
             {!loadingGoogle && (
               <div className="hidden md:block">
                 <p className="text-sm text-gray-500">
-                  {googleHotels.length} found on Google
+                  {googleHotels.length} found nearby
                 </p>
               </div>
             )}
@@ -380,6 +458,15 @@ const Home = () => {
                   <div className="bg-gray-200 h-4 rounded w-1/2"></div>
                 </div>
               ))}
+            </div>
+          ) : googleHotels.length === 0 ? (
+            <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
+              <p className="text-gray-500 mb-2">
+                No hotels found in this area.
+              </p>
+              <p className="text-sm text-gray-400">
+                Try increasing the radius.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -421,24 +508,24 @@ const Home = () => {
                 to nearby stays.
               </p>
             </div>
-
             <div className="step-item">
               <p className="font-serif text-7xl text-teal-700/40 mb-6">02</p>
               <div className="w-10 h-px bg-teal-500 mb-6" />
-              <h3 className="font-serif text-2xl mb-3">Compare with confidence</h3>
+              <h3 className="font-serif text-2xl mb-3">
+                Compare with confidence
+              </h3>
               <p className="text-gray-400 leading-relaxed">
                 Browse real prices, honest details, and the local knowledge
                 you need.
               </p>
             </div>
-
             <div className="step-item">
               <p className="font-serif text-7xl text-teal-700/40 mb-6">03</p>
               <div className="w-10 h-px bg-teal-500 mb-6" />
               <h3 className="font-serif text-2xl mb-3">Book directly</h3>
               <p className="text-gray-400 leading-relaxed">
-                Message your chosen hotel on WhatsApp. No middlemen, no
-                hidden fees.
+                Message your chosen hotel on WhatsApp. No middlemen, no hidden
+                fees.
               </p>
             </div>
           </div>
@@ -463,18 +550,16 @@ const Home = () => {
             <div className="absolute -top-6 left-10 text-8xl text-teal-700/20 font-serif leading-none">
               "
             </div>
-
             <p className="relative font-serif text-2xl md:text-3xl text-gray-800 italic leading-relaxed mb-10 text-center">
               Finally, a simple way to find a clean, comfortable stay in the
               city. The WhatsApp booking made everything effortless.
             </p>
-
             <div className="flex items-center justify-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-full bg-teal-700 text-white flex items-center justify-center text-sm font-medium">
-                AK
+                QK
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Ayesha K.</p>
+                <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
                 <p className="text-xs text-gray-500">Peshawar local</p>
               </div>
             </div>
@@ -485,9 +570,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════ */}
-      {/* FOR HOTEL OWNERS                        */}
-      {/* ═══════════════════════════════════════ */}
+      {/* FOR HOTEL OWNERS */}
       <section className="px-6 py-24 bg-gradient-to-br from-teal-800 via-teal-700 to-teal-600 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-5">
           <div
@@ -499,7 +582,6 @@ const Home = () => {
             }}
           />
         </div>
-
         <div className="relative max-w-4xl mx-auto text-center">
           <p className="text-xs tracking-[0.3em] text-teal-100 mb-4 font-medium">
             FOR HOTEL OWNERS

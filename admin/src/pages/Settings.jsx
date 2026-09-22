@@ -1,69 +1,119 @@
-import React, { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import API from '../services/api';
 
 const Settings = () => {
   const { admin } = useAuth();
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState('general');
   const [toast, setToast] = useState(null);
 
   // General
-  const [siteName, setSiteName] = useState("Peshawar Hotel Finder");
+  const [siteName, setSiteName] = useState('Peshawar Hotel Finder');
   const [defaultRadius, setDefaultRadius] = useState(3);
   const [maxRadius, setMaxRadius] = useState(8);
 
   // WhatsApp
   const [whatsappTemplate, setWhatsappTemplate] = useState(
-    `Assalam o Alaikum,\n\nMujhe {hotel_name} mein {persons} person ka {room_type} chahiye.\nPrice: PKR {price}\n\nPlease confirm availability.`,
+    `Assalam o Alaikum,\n\nMujhe {hotel_name} mein {persons} person ka {room_type} chahiye.\nPrice: PKR {price}\n\nPlease confirm availability.`
   );
 
   // Location
-  const [cityLat, setCityLat] = useState("34.0151");
-  const [cityLng, setCityLng] = useState("71.5249");
+  const [cityLat, setCityLat] = useState('34.0151');
+  const [cityLng, setCityLng] = useState('71.5249');
 
-  // Account
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // Account — password change
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
-  const showToast = (message, type = "success") => {
+  const showToast = (message, type = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   const handleSave = (section) => {
-    // Abhi ke liye sirf toast — backend API baad mein
-    showToast(`${section} settings saved (local only)`, "success");
+    showToast(`${section} settings saved (local only)`, 'success');
+  };
+
+  // ═══════════════════════════════════════════════════
+  // Change Password — WORKING
+  // ═══════════════════════════════════════════════════
+  const handleChangePassword = async () => {
+    // Validation
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showToast('All fields are required', 'error');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      showToast('New passwords do not match', 'error');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      showToast('Password must be at least 8 characters', 'error');
+      return;
+    }
+
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
+      showToast(
+        'Password must include uppercase, lowercase, and number',
+        'error'
+      );
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      await API.put('/admin/change-password', {
+        currentPassword,
+        newPassword
+      });
+
+      showToast('✓ Password changed successfully', 'success');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.error || 'Failed to change password';
+      showToast(errorMsg, 'error');
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const tabs = [
-    { key: "general", label: "General" },
-    { key: "whatsapp", label: "WhatsApp" },
-    { key: "location", label: "Location" },
-    { key: "account", label: "Account" },
+    { key: 'general', label: 'General' },
+    { key: 'whatsapp', label: 'WhatsApp' },
+    { key: 'location', label: 'Location' },
+    { key: 'account', label: 'Account' }
   ];
 
-  // Template preview — variables replace with sample data
+  // Template preview
   const previewMessage = whatsappTemplate
-    .replace("{hotel_name}", "Pearl Continental")
-    .replace("{persons}", "2")
-    .replace("{room_type}", "Deluxe Room")
-    .replace("{price}", "18,500");
+    .replace('{hotel_name}', 'Pearl Continental')
+    .replace('{persons}', '2')
+    .replace('{room_type}', 'Deluxe Room')
+    .replace('{price}', '18,500');
 
   return (
-    <div className="p-4 md:p-8">
-      {" "}
+    <div className="p-4 md:p-8 relative">
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-24 right-8 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-medium ${
-            toast.type === "success"
-              ? "bg-teal-700 text-white"
-              : "bg-red-600 text-white"
+          className={`fixed top-24 right-4 md:right-8 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-medium max-w-xs ${
+            toast.type === 'success'
+              ? 'bg-teal-700 text-white'
+              : 'bg-red-600 text-white'
           }`}
         >
           {toast.message}
         </div>
       )}
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
@@ -71,17 +121,18 @@ const Settings = () => {
           Manage your admin panel preferences
         </p>
       </div>
+
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-8">
-        <div className="flex gap-8">
+      <div className="border-b border-gray-200 mb-8 overflow-x-auto">
+        <div className="flex gap-6 md:gap-8 min-w-max">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`pb-3 text-sm font-medium transition border-b-2 -mb-px ${
+              className={`pb-3 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                 activeTab === tab.key
-                  ? "border-teal-700 text-teal-700"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                  ? 'border-teal-700 text-teal-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               {tab.label}
@@ -89,10 +140,11 @@ const Settings = () => {
           ))}
         </div>
       </div>
+
       {/* Content */}
       <div className="max-w-3xl">
         {/* GENERAL */}
-        {activeTab === "general" && (
+        {activeTab === 'general' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-1">
               General Settings
@@ -125,9 +177,6 @@ const Settings = () => {
                     onChange={(e) => setDefaultRadius(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Initial radius when user opens website
-                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -139,15 +188,12 @@ const Settings = () => {
                     onChange={(e) => setMaxRadius(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Maximum slider limit for user
-                  </p>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-100 flex justify-end">
                 <button
-                  onClick={() => handleSave("General")}
+                  onClick={() => handleSave('General')}
                   className="bg-teal-700 hover:bg-teal-800 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
                 >
                   Save Changes
@@ -158,7 +204,7 @@ const Settings = () => {
         )}
 
         {/* WHATSAPP */}
-        {activeTab === "whatsapp" && (
+        {activeTab === 'whatsapp' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-1">
               WhatsApp Message Template
@@ -180,25 +226,25 @@ const Settings = () => {
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="text-xs text-gray-500">Variables:</span>
-                  {["{hotel_name}", "{room_type}", "{persons}", "{price}"].map(
+                  {['{hotel_name}', '{room_type}', '{persons}', '{price}'].map(
                     (v) => (
                       <button
                         key={v}
                         onClick={() =>
-                          setWhatsappTemplate(whatsappTemplate + " " + v)
+                          setWhatsappTemplate(whatsappTemplate + ' ' + v)
                         }
                         className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-mono transition"
                       >
                         {v}
                       </button>
-                    ),
+                    )
                   )}
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preview (with sample data)
+                  Preview
                 </label>
                 <div className="bg-[#E5DDD5] rounded-lg p-4 min-h-[200px]">
                   <div className="bg-white rounded-lg p-3 shadow-sm max-w-[85%] whitespace-pre-wrap text-sm text-gray-900 leading-relaxed">
@@ -213,7 +259,7 @@ const Settings = () => {
 
             <div className="pt-4 mt-6 border-t border-gray-100 flex justify-end">
               <button
-                onClick={() => handleSave("WhatsApp")}
+                onClick={() => handleSave('WhatsApp')}
                 className="bg-teal-700 hover:bg-teal-800 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
               >
                 Save Template
@@ -223,7 +269,7 @@ const Settings = () => {
         )}
 
         {/* LOCATION */}
-        {activeTab === "location" && (
+        {activeTab === 'location' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-1">
               Default Location
@@ -283,7 +329,7 @@ const Settings = () => {
 
             <div className="pt-4 mt-6 border-t border-gray-100 flex justify-end">
               <button
-                onClick={() => handleSave("Location")}
+                onClick={() => handleSave('Location')}
                 className="bg-teal-700 hover:bg-teal-800 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
               >
                 Save Location
@@ -293,7 +339,7 @@ const Settings = () => {
         )}
 
         {/* ACCOUNT */}
-        {activeTab === "account" && (
+        {activeTab === 'account' && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-base font-semibold text-gray-900 mb-1">
@@ -303,21 +349,19 @@ const Settings = () => {
                 Your admin credentials
               </p>
 
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={admin?.email || ""}
-                    disabled
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none text-sm cursor-not-allowed"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Email change requires backend support
-                  </p>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={admin?.email || ''}
+                  disabled
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none text-sm cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Email change requires backend support
+                </p>
               </div>
             </div>
 
@@ -340,6 +384,7 @@ const Settings = () => {
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
                     placeholder="••••••••"
+                    autoComplete="current-password"
                   />
                 </div>
                 <div>
@@ -352,7 +397,11 @@ const Settings = () => {
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
                     placeholder="••••••••"
+                    autoComplete="new-password"
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Min 8 chars, uppercase, lowercase, number
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -364,28 +413,17 @@ const Settings = () => {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
                     placeholder="••••••••"
+                    autoComplete="new-password"
                   />
                 </div>
 
                 <div className="pt-4 border-t border-gray-100 flex justify-end">
                   <button
-                    onClick={() => {
-                      if (newPassword !== confirmPassword) {
-                        showToast("Passwords do not match", "error");
-                        return;
-                      }
-                      if (newPassword.length < 6) {
-                        showToast("Password must be 6+ chars", "error");
-                        return;
-                      }
-                      showToast(
-                        "Password change requires backend support",
-                        "error",
-                      );
-                    }}
-                    className="bg-teal-700 hover:bg-teal-800 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
+                    onClick={handleChangePassword}
+                    disabled={passwordLoading}
+                    className="bg-teal-700 hover:bg-teal-800 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Update Password
+                    {passwordLoading ? 'Updating...' : 'Update Password'}
                   </button>
                 </div>
               </div>

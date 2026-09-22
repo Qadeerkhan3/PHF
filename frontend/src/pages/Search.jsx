@@ -1,15 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import HotelCard from '../components/HotelCard';
-import { searchHotels, getNearbyHotels } from '../services/api';
+import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import HotelCard from "../components/HotelCard";
+import { searchHotels, getNearbyHotels } from "../services/api";
 
 gsap.registerPlugin(ScrollTrigger);
 
 const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get('q') || '');
+  const [query, setQuery] = useState(searchParams.get("q") || "");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -20,11 +20,11 @@ const Search = () => {
   const resultsRef = useRef(null);
 
   const popularSearches = [
-    'Pearl Continental',
-    'Shelton',
-    'Hotel Grand',
-    'Fort Continental',
-    'Serena',
+    "Pearl Continental",
+    "Shelton",
+    "Hotel Grand",
+    "Fort Continental",
+    "Serena",
   ];
 
   // Featured hotels (default Peshawar city center)
@@ -45,12 +45,12 @@ const Search = () => {
   // GSAP — page load
   useEffect(() => {
     const ctx = gsap.context(() => {
-      gsap.from('.search-fade', {
+      gsap.from(".search-fade", {
         y: 40,
         opacity: 0,
         duration: 0.8,
         stagger: 0.15,
-        ease: 'power2.out'
+        ease: "power2.out",
       });
     }, containerRef);
 
@@ -84,7 +84,7 @@ const Search = () => {
   };
 
   useEffect(() => {
-    const q = searchParams.get('q');
+    const q = searchParams.get("q");
     if (q) {
       setQuery(q);
       doSearch(q);
@@ -95,12 +95,12 @@ const Search = () => {
   useEffect(() => {
     if (!loading && results.length > 0 && resultsRef.current) {
       const ctx = gsap.context(() => {
-        gsap.from('.result-item', {
+        gsap.from(".result-item", {
           y: 30,
           opacity: 0,
           duration: 0.5,
           stagger: 0.08,
-          ease: 'power2.out'
+          ease: "power2.out",
         });
       }, resultsRef);
 
@@ -124,40 +124,50 @@ const Search = () => {
             FIND A STAY
           </p>
           <h1 className="search-fade font-serif text-5xl md:text-6xl text-gray-900 mb-6 leading-tight">
-            Search hotels<br />by name.
+            Search hotels
+            <br />
+            by name.
           </h1>
           <p className="search-fade text-lg text-gray-600 max-w-xl mx-auto leading-relaxed">
-            Know the hotel you're looking for? Type its name and we'll find
-            it in our Peshawar directory.
+            Know the hotel you're looking for? Type its name and we'll find it
+            in our Peshawar directory.
           </p>
         </div>
 
         {/* SEARCH CARD */}
         <div className="search-fade bg-white border border-gray-200 rounded-2xl p-2 shadow-lg mb-8">
-          <form onSubmit={handleSearch} className="flex items-center">
-            <div className="pl-6 text-gray-400">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.35-4.35" />
-              </svg>
+          <form
+            onSubmit={handleSearch}
+            className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-0"
+          >
+            {/* Input row */}
+            <div className="flex items-center flex-1 min-w-0">
+              <div className="pl-4 md:pl-6 text-gray-400 shrink-0">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Pearl Continental, Shelton..."
+                className="flex-1 min-w-0 bg-transparent outline-none py-4 md:py-5 px-3 md:px-4 text-base md:text-lg text-gray-900 placeholder-gray-400"
+              />
             </div>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Pearl Continental, Shelton..."
-              className="flex-1 bg-transparent outline-none py-5 px-4 text-lg text-gray-900 placeholder-gray-400"
-            />
+
+            {/* Button */}
             <button
               type="submit"
-              className="bg-teal-700 hover:bg-teal-800 text-white px-8 py-4 rounded-xl text-sm font-medium transition m-1"
+              className="bg-teal-700 hover:bg-teal-800 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl text-sm font-medium transition md:m-1 shrink-0"
             >
               Search
             </button>
@@ -231,8 +241,8 @@ const Search = () => {
               <p className="text-sm text-gray-500">
                 <span className="font-medium text-gray-900">
                   {results.length}
-                </span>{' '}
-                {results.length === 1 ? 'hotel' : 'hotels'} found for "{query}"
+                </span>{" "}
+                {results.length === 1 ? "hotel" : "hotels"} found for "{query}"
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
