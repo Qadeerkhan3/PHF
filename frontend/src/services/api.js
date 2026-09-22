@@ -10,6 +10,10 @@ const API = axios.create({
 export const getNearbyHotels = (lat, lng, radius = 3000) =>
   API.get(`/hotels/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
 
+// ↓ YEH MISSING THA — Home.jsx isay import kar raha hai
+export const getNearbyGoogleHotels = (lat, lng, radius = 3000) =>
+  API.get(`/hotels/nearby-google?lat=${lat}&lng=${lng}&radius=${radius}`);
+
 export const searchHotels = (name) =>
   API.get(`/hotels/search?name=${name}`);
 
