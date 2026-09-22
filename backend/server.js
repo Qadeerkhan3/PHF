@@ -12,14 +12,10 @@ app.use(helmet());
 
 // CORS — sirf allowed origins
 const allowedOrigins = [
-  // Local development
-  'http://localhost:5173',    // Vite frontend
-  'http://localhost:3000',    // React (agar use karo)
-  'http://localhost:5174',    // Vite admin
-
-  // Production (Vercel)
-  'https://phf-frnt.vercel.app',        // ← Frontend URL
-  'https://phf-sigma.vercel.app'        // ← Admin URL
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://phf-frnt.vercel.app',        // ← Frontend
+  'https://phf-sigma.vercel.app'        // ← Admin
 ];
 
 app.use(
