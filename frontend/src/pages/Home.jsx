@@ -442,7 +442,7 @@ const Home = () => {
                 AK
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Ayesha K.</p>
+                <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
                 <p className="text-xs text-gray-500">Peshawar local</p>
               </div>
             </div>
