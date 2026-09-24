@@ -35,7 +35,7 @@ const Home = () => {
     lng: PESHAWAR_LNG,
     label: 'Peshawar City Center'
   });
-  const [radius, setRadius] = useState(8000);
+  const [radius, setRadius] = useState(5000);
 
   const heroRef = useRef(null);
   const hotelsRef = useRef(null);
@@ -46,29 +46,17 @@ const Home = () => {
   const isUserInPeshawar =
     getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
 
-  // ═══════════════════════════════════════════════════
-  // FETCH — DB + Google (with HARD TIMEOUT)
-  // ═══════════════════════════════════════════════════
+  // Fetch DB + Google
   useEffect(() => {
     let isMounted = true;
-    let hardTimeoutId;
 
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
 
-      // HARD TIMEOUT — 12 sec baad force loading false
-      hardTimeoutId = setTimeout(() => {
-        if (isMounted) {
-          console.log('⏰ Hard timeout — forcing loading false');
-          setLoading(false);
-          setLoadingGoogle(false);
-        }
-      }, 12000);
-
       let dbResults = [];
 
-      // ─── 1. DB hotels ───
+      // 1. DB hotels
       if (isUserInPeshawar) {
         try {
           const dbRes = await getNearbyHotels(
@@ -88,7 +76,7 @@ const Home = () => {
 
       if (isMounted) setLoading(false);
 
-      // ─── 2. Google hotels (Overpass) ───
+      // 2. Google hotels
       try {
         const googleRes = await getNearbyGoogleHotels(
           location.lat,
@@ -96,7 +84,6 @@ const Home = () => {
           radius
         );
 
-        // Duplicates remove (name match)
         const dbNames = new Set(
           (isUserInPeshawar ? dbResults : []).map((h) =>
             h.name.toLowerCase().trim()
@@ -119,10 +106,7 @@ const Home = () => {
         console.error('Google fetch failed:', err);
         if (isMounted) setGoogleHotels([]);
       } finally {
-        if (isMounted) {
-          setLoadingGoogle(false);
-          if (hardTimeoutId) clearTimeout(hardTimeoutId);
-        }
+        if (isMounted) setLoadingGoogle(false);
       }
     };
 
@@ -130,13 +114,10 @@ const Home = () => {
 
     return () => {
       isMounted = false;
-      if (hardTimeoutId) clearTimeout(hardTimeoutId);
     };
-  }, [location, radius, isUserInPeshawar]);
+  }, [location.lat, location.lng, radius, isUserInPeshawar]);
 
-  // ═══════════════════════════════════════════════════
-  // ANIMATIONS
-  // ═══════════════════════════════════════════════════
+  // Animations
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.hero-eyebrow', { y: 20, opacity: 0, duration: 0.8, delay: 0.2 });
@@ -396,7 +377,6 @@ const Home = () => {
         </div>
 
         {loadingGoogle ? (
-          /* Loading skeleton */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
@@ -407,7 +387,6 @@ const Home = () => {
             ))}
           </div>
         ) : googleHotels.length === 0 ? (
-          /* Friendly empty state */
           <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl">
             <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
@@ -444,7 +423,6 @@ const Home = () => {
             </div>
           </div>
         ) : (
-          /* Hotels grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {googleHotels.map((place) => (
               <div key={place.id} className="google-card-item">

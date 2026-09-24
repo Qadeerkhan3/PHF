@@ -33,21 +33,22 @@ router.get('/nearby-google', async (req, res) => {
     console.log('=== Overpass API Request ===');
     console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
-    // PURANI CONDITION — sab tourism types
+    // ⚡ FAST query — timeout 8s, sirf hotel aur guest_house, nodes only
     const overpassQuery = `
-      [out:json][timeout:25];
+      [out:json][timeout:8];
       (
-        node["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
-        way["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
-        node["building"="hotel"](around:${radius},${lat},${lng});
+        node["tourism"="hotel"](around:${radius},${lat},${lng});
+        node["tourism"="guest_house"](around:${radius},${lat},${lng});
       );
       out body center;
     `;
 
-    // Vercel 10s limit ke andar — 6 sec timeout
+    // Single mirror, 7 sec timeout (Vercel 10s limit ke andar)
     let response = null;
 
     try {
+      console.log('Trying overpass-api.de...');
+
       response = await axios.post(
         'https://overpass-api.de/api/interpreter',
         `data=${encodeURIComponent(overpassQuery)}`,
@@ -56,7 +57,7 @@ router.get('/nearby-google', async (req, res) => {
             'Content-Type': 'application/x-www-form-urlencoded',
             'User-Agent': 'PHF-App/1.0'
           },
-          timeout: 6000
+          timeout: 7000
         }
       );
 
