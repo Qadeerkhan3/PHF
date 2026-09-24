@@ -3,6 +3,15 @@ const router = express.Router();
 const axios = require('axios');
 const Hotel = require('../models/Hotel');
 
+// ═══════════════════════════════════════════════════
+// OVERPASS API MIRRORS (agar ek fail ho toh doosra try karo)
+// ═══════════════════════════════════════════════════
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter'
+];
+
 // ─── Nearby hotels (from DB) ───
 router.get('/nearby', async (req, res) => {
   try {
@@ -30,7 +39,7 @@ router.get('/nearby-google', async (req, res) => {
   try {
     const { lat, lng, radius = 3000 } = req.query;
 
-    console.log('=== Overpass API Request ===');
+    console.log('\n=== Overpass API Request ===');
     console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
     // Overpass query — hotels, guest houses, hostels, motels
@@ -44,20 +53,72 @@ router.get('/nearby-google', async (req, res) => {
       out body center;
     `;
 
-    const response = await axios.post(
-      'https://overpass-api.de/api/interpreter',
-      `data=${encodeURIComponent(overpassQuery)}`,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'PHF-App/1.0'
-        },
-        timeout: 30000
+    // ─── Retry Logic with Multiple Mirrors ───
+    let response = null;
+    let lastError = null;
+
+    // Har mirror try karo (max 3 mirrors)
+    for (let mirrorIndex = 0; mirrorIndex < OVERPASS_MIRRORS.length; mirrorIndex++) {
+      const mirror = OVERPASS_MIRRORS[mirrorIndex];
+      console.log(`\n--- Trying mirror ${mirrorIndex + 1}: ${mirror} ---`);
+
+      // Har mirror par 2 attempts (total 6 attempts)
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`Attempt ${attempt}/2 on mirror ${mirrorIndex + 1}...`);
+
+          response = await axios.post(
+            mirror,
+            `data=${encodeURIComponent(overpassQuery)}`,
+            {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'PHF-App/1.0'
+              },
+              timeout: 40000
+            }
+          );
+
+          console.log(`✓ Success on mirror ${mirrorIndex + 1}, attempt ${attempt}`);
+          break; // Success — inner loop se bahar
+        } catch (err) {
+          lastError = err;
+          const status = err.response?.status;
+          console.log(`✗ Failed: ${status || err.message}`);
+
+          // Agar 504/429/503/500 — retry karo
+          if ([504, 429, 503, 500].includes(status)) {
+            if (attempt < 2) {
+              console.log('Waiting 3 seconds before retry...');
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+              continue;
+            }
+          } else {
+            // Agar koi aur error (jaise 400 — invalid query), toh mirror change karo
+            console.log('Non-retryable error, moving to next mirror...');
+            break;
+          }
+        }
       }
-    );
+
+      // Agar response mil gaya toh outer loop se bahar
+      if (response) break;
+
+      // Next mirror se pehle 2 second wait
+      if (mirrorIndex < OVERPASS_MIRRORS.length - 1) {
+        console.log('Waiting 2 seconds before next mirror...');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+
+    // Agar saare mirrors fail
+    if (!response) {
+      console.error('=== All Overpass mirrors failed ===');
+      throw lastError;
+    }
 
     const elements = response.data.elements || [];
-    console.log('Raw elements found:', elements.length);
+    console.log('\nRaw elements found:', elements.length);
 
     // Transform Overpass data to match frontend format
     const places = elements
@@ -107,18 +168,20 @@ router.get('/nearby-google', async (req, res) => {
 
     res.json(uniquePlaces);
   } catch (err) {
-    console.error('=== Overpass API ERROR ===');
+    console.error('\n=== Overpass API FINAL ERROR ===');
     console.error('Status:', err.response?.status);
     console.error('Message:', err.message);
 
     res.status(500).json({
       error: 'Failed to fetch nearby hotels from OpenStreetMap',
-      details: err.message
+      details: err.response?.status
+        ? `Server busy (${err.response.status}). Please try again in a moment.`
+        : err.message
     });
   }
 });
 
-// ─── Google Photo Proxy (kept for compatibility — not used now) ───
+// ─── Google Photo Proxy (compatibility) ───
 router.get('/photo-proxy', async (req, res) => {
   try {
     const { name } = req.query;
