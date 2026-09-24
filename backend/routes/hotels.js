@@ -1,23 +1,23 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const axios = require("axios");
-const Hotel = require("../models/Hotel");
+const axios = require('axios');
+const Hotel = require('../models/Hotel');
 
 // ─── Nearby hotels (from DB) ───
-router.get("/nearby", async (req, res) => {
+router.get('/nearby', async (req, res) => {
   try {
     const { lat, lng, radius = 3000 } = req.query;
     const hotels = await Hotel.find({
-      status: "Active",
+      status: 'Active',
       location: {
         $near: {
           $geometry: {
-            type: "Point",
-            coordinates: [parseFloat(lng), parseFloat(lat)],
+            type: 'Point',
+            coordinates: [parseFloat(lng), parseFloat(lat)]
           },
-          $maxDistance: parseInt(radius),
-        },
-      },
+          $maxDistance: parseInt(radius)
+        }
+      }
     });
     res.json(hotels);
   } catch (err) {
@@ -25,91 +25,125 @@ router.get("/nearby", async (req, res) => {
   }
 });
 
-// ─── Nearby hotels (from Google Places API) ───
-router.get("/nearby-google", async (req, res) => {
+// ─── Nearby hotels (from Overpass API — OpenStreetMap) ───
+router.get('/nearby-google', async (req, res) => {
   try {
     const { lat, lng, radius = 3000 } = req.query;
 
-    console.log("=== Google Nearby Request ===");
-    console.log("Lat:", lat, "Lng:", lng, "Radius:", radius);
-    console.log("API Key present:", !!process.env.GOOGLE_MAPS_API_KEY);
+    console.log('=== Overpass API Request ===');
+    console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
-    if (!process.env.GOOGLE_MAPS_API_KEY) {
-      return res.status(500).json({
-        error: "Google Maps API key not configured",
-      });
-    }
+    // Overpass query — hotels, guest houses, hostels, motels
+    const overpassQuery = `
+      [out:json][timeout:25];
+      (
+        node["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
+        way["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
+        node["building"="hotel"](around:${radius},${lat},${lng});
+      );
+      out body center;
+    `;
 
     const response = await axios.post(
-      "https://places.googleapis.com/v1/places:searchNearby",
-      {
-        includedTypes: ["lodging"],
-        maxResultCount: 20,
-        locationRestriction: {
-          circle: {
-            center: {
-              latitude: parseFloat(lat),
-              longitude: parseFloat(lng),
-            },
-            radius: parseFloat(radius),
-          },
-        },
-      },
+      'https://overpass-api.de/api/interpreter',
+      `data=${encodeURIComponent(overpassQuery)}`,
       {
         headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY,
-          "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.photos,places.location,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri",
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'PHF-App/1.0'
         },
-      },
+        timeout: 30000
+      }
     );
 
-    console.log("Places found:", response.data.places?.length || 0);
-    res.json(response.data.places || []);
+    const elements = response.data.elements || [];
+    console.log('Raw elements found:', elements.length);
+
+    // Transform Overpass data to match frontend format
+    const places = elements
+      .filter((el) => el.tags && el.tags.name)
+      .map((el) => {
+        const elemLat = el.lat || el.center?.lat;
+        const elemLng = el.lon || el.center?.lon;
+
+        if (!elemLat || !elemLng) return null;
+
+        return {
+          id: `osm-${el.type}-${el.id}`,
+          displayName: { text: el.tags.name },
+          formattedAddress:
+            [
+              el.tags['addr:housenumber'],
+              el.tags['addr:street'],
+              el.tags['addr:city'] || 'Peshawar'
+            ]
+              .filter(Boolean)
+              .join(', ') || 'Address not available',
+          rating: null,
+          userRatingCount: null,
+          internationalPhoneNumber:
+            el.tags.phone || el.tags['contact:phone'] || null,
+          websiteUri:
+            el.tags.website ||
+            el.tags['contact:website'] ||
+            el.tags.url ||
+            null,
+          googleMapsUri: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+          location: { latitude: elemLat, longitude: elemLng },
+          photos: [],
+          source: 'OpenStreetMap'
+        };
+      })
+      .filter(Boolean);
+
+    // Duplicates remove (same name)
+    const uniquePlaces = places.filter(
+      (place, index, self) =>
+        index ===
+        self.findIndex((p) => p.displayName.text === place.displayName.text)
+    );
+
+    console.log('Unique places returned:', uniquePlaces.length);
+
+    res.json(uniquePlaces);
   } catch (err) {
-    console.error("=== Google Places ERROR ===");
-    console.error("Status:", err.response?.status);
-    console.error("Data:", JSON.stringify(err.response?.data, null, 2));
-    console.error("Message:", err.message);
+    console.error('=== Overpass API ERROR ===');
+    console.error('Status:', err.response?.status);
+    console.error('Message:', err.message);
 
     res.status(500).json({
-      error: "Failed to fetch nearby hotels from Google",
-      details: err.response?.data || err.message,
+      error: 'Failed to fetch nearby hotels from OpenStreetMap',
+      details: err.message
     });
   }
 });
 
-// ─── Google Photo Proxy (API key secure rakhne ke liye) ───
-router.get("/photo-proxy", async (req, res) => {
+// ─── Google Photo Proxy (kept for compatibility — not used now) ───
+router.get('/photo-proxy', async (req, res) => {
   try {
     const { name } = req.query;
-
     if (!name || !process.env.GOOGLE_MAPS_API_KEY) {
-      return res.status(400).json({ error: "Missing params" });
+      return res.status(400).json({ error: 'Missing params' });
     }
 
     const photoUrl = `https://places.googleapis.com/v1/${name}/media?maxHeightPx=400&maxWidthPx=600&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+    const response = await axios.get(photoUrl, { responseType: 'stream' });
 
-    const response = await axios.get(photoUrl, {
-      responseType: "stream",
-    });
-
-    res.set("Content-Type", response.headers["content-type"]);
+    res.set('Content-Type', response.headers['content-type']);
     response.data.pipe(res);
   } catch (err) {
-    console.error("Photo proxy error:", err.message);
-    res.status(500).json({ error: "Failed to fetch photo" });
+    console.error('Photo proxy error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch photo' });
   }
 });
 
 // ─── Search hotels by name ───
-router.get("/search", async (req, res) => {
+router.get('/search', async (req, res) => {
   try {
     const { name } = req.query;
     const hotels = await Hotel.find({
-      status: "Active",
-      name: { $regex: name, $options: "i" },
+      status: 'Active',
+      name: { $regex: name, $options: 'i' }
     });
     res.json(hotels);
   } catch (err) {
@@ -118,7 +152,7 @@ router.get("/search", async (req, res) => {
 });
 
 // ─── Single hotel detail ───
-router.get("/:id", async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const hotel = await Hotel.findById(req.params.id);
     res.json(hotel);
