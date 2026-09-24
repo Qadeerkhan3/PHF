@@ -12,49 +12,113 @@ const LocationModal = ({ onLocationSet }) => {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem('userLocation');
+    const initLocation = async () => {
+      const saved = localStorage.getItem('userLocation');
+      const permissionAsked = localStorage.getItem('locationPermissionAsked');
 
-    if (saved) {
-      const { lat, lng, label, timestamp } = JSON.parse(saved);
-      const ageInMinutes = (Date.now() - timestamp) / 1000 / 60;
+      // SCENARIO 1: Pehli baar user aaya
+      if (!permissionAsked) {
+        const timer = setTimeout(() => setShow(true), 800);
+        return () => clearTimeout(timer);
+      }
 
-      if (ageInMinutes < 30) {
-        onLocationSet({ lat, lng, label });
+      // SCENARIO 2: User ne "Not now" kiya tha (denied)
+      const permissionState = localStorage.getItem('locationPermissionState');
+      
+      if (permissionState === 'denied') {
+        // default location
+        if (saved) {
+          const { lat, lng, label } = JSON.parse(saved);
+          onLocationSet({ lat, lng, label });
+        } else {
+          onLocationSet({
+            lat: 34.0151,
+            lng: 71.5249,
+            label: 'Peshawar City Center'
+          });
+        }
         return;
       }
 
+      // 3  User ne "Allow" kiya tha
+      // Browser permission check karo
       if (navigator.permissions) {
-        navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        try {
+          const result = await navigator.permissions.query({
+            name: 'geolocation'
+          });
+
           if (result.state === 'granted') {
+            // Permission granted hai — silently nayi location lo
+            console.log('Permission granted — fetching fresh location silently...');
+
             navigator.geolocation.getCurrentPosition(
               async (pos) => {
                 const { latitude, longitude } = pos.coords;
+
+                console.log('=== Fresh GPS ===');
+                console.log('Lat:', latitude, 'Lng:', longitude);
+
                 const areaName = await reverseGeocode(latitude, longitude);
+
                 const newLoc = {
                   lat: latitude,
                   lng: longitude,
                   label: areaName || 'Your location',
                   timestamp: Date.now()
                 };
+
                 localStorage.setItem('userLocation', JSON.stringify(newLoc));
                 onLocationSet(newLoc);
               },
-              () => {
-                onLocationSet({ lat, lng, label });
+              (err) => {
+                // GPS fail — cached use karo
+                console.log('GPS failed, using cache:', err.message);
+                if (saved) {
+                  const { lat, lng, label } = JSON.parse(saved);
+                  onLocationSet({ lat, lng, label });
+                }
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0 // ← Force fresh location, cache nahi
               }
             );
+          } else if (result.state === 'denied') {
+            // Browser-level deny — Peshawar default
+            onLocationSet({
+              lat: 34.0151,
+              lng: 71.5249,
+              label: 'Peshawar City Center'
+            });
           } else {
+            // Prompt state — user ne decide nahi kiya
+            if (saved) {
+              const { lat, lng, label } = JSON.parse(saved);
+              onLocationSet({ lat, lng, label });
+            } else {
+              setShow(true);
+            }
+          }
+        } catch (err) {
+          // permissions API fail — cached use karo
+          console.error('Permissions API failed:', err);
+          if (saved) {
+            const { lat, lng, label } = JSON.parse(saved);
             onLocationSet({ lat, lng, label });
           }
-        });
+        }
       } else {
-        onLocationSet({ lat, lng, label });
+        // Browser permissions API support nahi — cached use karo
+        if (saved) {
+          const { lat, lng, label } = JSON.parse(saved);
+          onLocationSet({ lat, lng, label });
+        }
       }
-      return;
-    }
+    };
 
-    const timer = setTimeout(() => setShow(true), 800);
-    return () => clearTimeout(timer);
+    initLocation();
   }, []);
 
   // Body scroll lock
@@ -69,12 +133,8 @@ const LocationModal = ({ onLocationSet }) => {
     };
   }, [show]);
 
-  // ═══════════════════════════════════════════════════
-  // Reverse Geocoding — Nominatim pehle (specific area),
-  // BigDataCloud fallback
-  // ═══════════════════════════════════════════════════
+  // Reverse Geocoding
   const reverseGeocode = async (lat, lng) => {
-    // ─── 1. Nominatim pehle try karo (specific area name) ───
     try {
       const nomRes = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
@@ -82,30 +142,17 @@ const LocationModal = ({ onLocationSet }) => {
       );
       const nomData = await nomRes.json();
 
-      console.log('=== Nominatim Full Data ===');
-      console.log(JSON.stringify(nomData.address, null, 2));
-
       if (nomData.address) {
-        // Area name — priority order (chhota se bada)
         const area =
-          nomData.address.neighbourhood ||     // "Tehkal"
-          nomData.address.suburb ||             // "University Town"
-          nomData.address.quarter ||            // "Jahangir Abad"
-          nomData.address.residential ||        // Residential
-          nomData.address.village ||            // Village
-          nomData.address.hamlet ||             // Small settlement
-          nomData.address.city_district;        // "Peshawar City"
+          nomData.address.neighbourhood ||
+          nomData.address.suburb ||
+          nomData.address.quarter ||
+          nomData.address.residential ||
+          nomData.address.village ||
+          nomData.address.hamlet;
 
-        // City name
-        const city =
-          nomData.address.city ||
-          nomData.address.town ||
-          nomData.address.municipality;
+        const city = nomData.address.city || nomData.address.town;
 
-        console.log('Nominatim area:', area);
-        console.log('Nominatim city:', city);
-
-        // Combine
         if (area && area !== city && area !== 'Peshawar') {
           return city ? `${area}, ${city}` : area;
         }
@@ -113,42 +160,29 @@ const LocationModal = ({ onLocationSet }) => {
         if (city && city !== 'Peshawar') {
           return city;
         }
-
-        if (city === 'Peshawar') {
-          // Peshawar hai, lekin area nahi mila — BigDataCloud try karo
-          console.log('Only Peshawar from Nominatim, trying BigDataCloud...');
-        } else if (city) {
-          return city;
-        }
       }
     } catch (err) {
       console.error('Nominatim failed:', err);
     }
 
-    // ─── 2. BigDataCloud fallback ───
+    // BigDataCloud fallback
     try {
       const res = await fetch(
         `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
       );
       const data = await res.json();
 
-      console.log('=== BigDataCloud Full Data ===');
-      console.log(JSON.stringify(data, null, 2));
-
       const locality = data.locality;
       const city = data.city;
 
-      // Priority 1: locality (specific area)
       if (locality && locality !== city && locality !== 'Peshawar') {
         return city ? `${locality}, ${city}` : locality;
       }
 
-      // Priority 2: administrative array (deepest first)
       if (data.localityInfo?.administrative) {
         const sorted = [...data.localityInfo.administrative].sort(
           (a, b) => (b.adminLevel || 0) - (a.adminLevel || 0)
         );
-
         for (const item of sorted) {
           if (
             item.name &&
@@ -162,15 +196,12 @@ const LocationModal = ({ onLocationSet }) => {
         }
       }
 
-      if (city) {
-        return city;
-      }
-
-      return 'Your location';
+      if (city) return city;
     } catch (err) {
       console.error('BigDataCloud failed:', err);
-      return null;
     }
+
+    return null;
   };
 
   const saveLocation = (loc) => {
@@ -186,26 +217,25 @@ const LocationModal = ({ onLocationSet }) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const { latitude, longitude } = pos.coords;
-
-          console.log('=== GPS Coordinates ===');
-          console.log('Lat:', latitude, 'Lng:', longitude);
-
           const areaName = await reverseGeocode(latitude, longitude);
 
           const detected = {
             lat: latitude,
             lng: longitude,
-            label:
-              areaName || `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
+            label: areaName || `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
           };
 
           setDetectedLocation(detected);
           setStep('detected');
 
+          // Save permission state
+          localStorage.setItem('locationPermissionAsked', 'true');
+          localStorage.setItem('locationPermissionState', 'granted');
+
           setTimeout(() => {
             saveLocation(detected);
             setShow(false);
-          }, 2000);
+          }, 1800);
         },
         async () => {
           const fallback = {
@@ -215,10 +245,14 @@ const LocationModal = ({ onLocationSet }) => {
           };
           setDetectedLocation(fallback);
           setStep('detected');
+
+          localStorage.setItem('locationPermissionAsked', 'true');
+          localStorage.setItem('locationPermissionState', 'denied');
+
           setTimeout(() => {
             saveLocation(fallback);
             setShow(false);
-          }, 2000);
+          }, 1800);
         }
       );
     } else {
@@ -228,6 +262,8 @@ const LocationModal = ({ onLocationSet }) => {
         label: 'Peshawar City Center'
       };
       saveLocation(fallback);
+      localStorage.setItem('locationPermissionAsked', 'true');
+      localStorage.setItem('locationPermissionState', 'denied');
       setShow(false);
     }
   };
@@ -238,6 +274,8 @@ const LocationModal = ({ onLocationSet }) => {
       lng: 71.5249,
       label: 'Peshawar City Center'
     });
+    localStorage.setItem('locationPermissionAsked', 'true');
+    localStorage.setItem('locationPermissionState', 'denied');
     setShow(false);
   };
 
