@@ -30,6 +30,7 @@ const Home = () => {
   const [googleHotels, setGoogleHotels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [googleError, setGoogleError] = useState(false);
   const [location, setLocation] = useState({
     lat: PESHAWAR_LAT,
     lng: PESHAWAR_LNG,
@@ -46,26 +47,40 @@ const Home = () => {
   const isUserInPeshawar =
     getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
 
+  // ═══════════════════════════════════════════════════
+  // FETCH — DB + Google (Overpass)
+  // ═══════════════════════════════════════════════════
   useEffect(() => {
+    let isMounted = true;
+
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
+      setGoogleError(false);
 
-      // 1. DB hotels — sirf Peshawar mein
+      let dbResults = [];
+
+      // ─── 1. DB hotels (sirf Peshawar mein) ───
       if (isUserInPeshawar) {
         try {
-          const dbRes = await getNearbyHotels(location.lat, location.lng, radius);
-          setDbHotels(dbRes.data);
+          const dbRes = await getNearbyHotels(
+            location.lat,
+            location.lng,
+            radius
+          );
+          dbResults = dbRes.data || [];
+          if (isMounted) setDbHotels(dbResults);
         } catch (err) {
           console.error('DB fetch failed:', err);
-          setDbHotels([]);
+          if (isMounted) setDbHotels([]);
         }
       } else {
-        setDbHotels([]);
+        if (isMounted) setDbHotels([]);
       }
-      setLoading(false);
 
-      // 2. Google hotels — har jagah
+      if (isMounted) setLoading(false);
+
+      // ─── 2. Google hotels (Overpass — har jagah) ───
       try {
         const googleRes = await getNearbyGoogleHotels(
           location.lat,
@@ -74,7 +89,7 @@ const Home = () => {
         );
 
         const dbNames = new Set(
-          (isUserInPeshawar ? dbHotels : []).map((h) =>
+          (isUserInPeshawar ? dbResults : []).map((h) =>
             h.name.toLowerCase().trim()
           )
         );
@@ -90,19 +105,31 @@ const Home = () => {
           return true;
         });
 
-        setGoogleHotels(uniqueGoogle);
+        if (isMounted) {
+          setGoogleHotels(uniqueGoogle);
+          setGoogleError(false);
+        }
       } catch (err) {
         console.error('Google fetch failed:', err);
-        setGoogleHotels([]);
+        if (isMounted) {
+          setGoogleHotels([]);
+          setGoogleError(true);
+        }
       } finally {
-        setLoadingGoogle(false);
+        if (isMounted) setLoadingGoogle(false);
       }
     };
 
     fetchAll();
+
+    return () => {
+      isMounted = false;
+    };
   }, [location, radius, isUserInPeshawar]);
 
-  // Hero animations
+  // ═══════════════════════════════════════════════════
+  // ANIMATIONS
+  // ═══════════════════════════════════════════════════
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.hero-eyebrow', { y: 20, opacity: 0, duration: 0.8, delay: 0.2 });
@@ -190,7 +217,10 @@ const Home = () => {
       <LocationModal onLocationSet={setLocation} />
 
       {/* HERO */}
-      <section ref={heroRef} className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
+      <section
+        ref={heroRef}
+        className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden"
+      >
         <div className="absolute inset-0">
           <img
             src="https://images.unsplash.com/photo-1599661046289-e31897846e41?w=1920&q=80"
@@ -319,7 +349,7 @@ const Home = () => {
               We're not in your city yet.
             </h2>
             <p className="text-gray-600 max-w-lg mx-auto mb-6 leading-relaxed">
-              Peshawar Hotel Finder's curated listings are currently only available in Peshawar. We're working to expand to more cities soon. In the meantime, explore hotels discovered nearby via Google Maps below.
+              Peshawar Hotel Finder's curated listings are currently only available in Peshawar. We're working to expand to more cities soon. In the meantime, explore hotels discovered nearby below.
             </p>
             <div className="inline-flex items-center gap-2 text-sm text-amber-800 bg-white/60 px-4 py-2 rounded-full">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -332,57 +362,82 @@ const Home = () => {
         </section>
       )}
 
-      {/* GOOGLE HOTELS */}
-      {(loadingGoogle || googleHotels.length > 0) && (
-        <section ref={googleRef} className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200">
-          <div className="flex items-end justify-between mb-12">
-            <div>
-              <p className="text-xs tracking-[0.2em] text-amber-600 mb-3 font-medium">
-                {isUserInPeshawar ? 'DISCOVER MORE' : 'NEARBY HOTELS'}
-              </p>
-              <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
-                {isUserInPeshawar ? 'More stays nearby.' : 'Hotels near you.'}
-              </h2>
-              <p className="text-sm text-gray-500 mt-4 max-w-xl">
-                Hotels around {location.label} — discovered via Google Maps. Click to view details, ratings, and photos.
-              </p>
-            </div>
-            {!loadingGoogle && (
-              <div className="hidden md:block">
-                <p className="text-sm text-gray-500">{googleHotels.length} found nearby</p>
-              </div>
-            )}
+      {/* GOOGLE HOTELS — Loading skeleton → hotels OR error */}
+      <section
+        ref={googleRef}
+        className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
+      >
+        <div className="flex items-end justify-between mb-12">
+          <div>
+            <p className="text-xs tracking-[0.2em] text-amber-600 mb-3 font-medium">
+              {isUserInPeshawar ? 'DISCOVER MORE' : 'NEARBY HOTELS'}
+            </p>
+            <h2 className="font-serif text-4xl md:text-5xl text-gray-900 leading-tight">
+              {isUserInPeshawar ? 'More stays nearby.' : 'Hotels near you.'}
+            </h2>
+            <p className="text-sm text-gray-500 mt-4 max-w-xl">
+              Hotels around {location.label} — discovered via OpenStreetMap.
+            </p>
           </div>
-
-          {loadingGoogle ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="bg-gray-200 h-56 rounded-lg mb-4"></div>
-                  <div className="bg-gray-200 h-6 rounded w-3/4 mb-2"></div>
-                  <div className="bg-gray-200 h-4 rounded w-1/2"></div>
-                </div>
-              ))}
-            </div>
-          ) : googleHotels.length === 0 ? (
-            <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
-              <p className="text-gray-500 mb-2">No hotels found in this area.</p>
-              <p className="text-sm text-gray-400">Try increasing the radius.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {googleHotels.map((place) => (
-                <div key={place.id} className="google-card-item">
-                  <GoogleHotelCard place={place} />
-                </div>
-              ))}
+          {!loadingGoogle && googleHotels.length > 0 && (
+            <div className="hidden md:block">
+              <p className="text-sm text-gray-500">
+                {googleHotels.length} found nearby
+              </p>
             </div>
           )}
-        </section>
-      )}
+        </div>
+
+        {loadingGoogle ? (
+          /* Loading skeleton */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse">
+                <div className="bg-gray-200 h-56 rounded-lg mb-4"></div>
+                <div className="bg-gray-200 h-6 rounded w-3/4 mb-2"></div>
+                <div className="bg-gray-200 h-4 rounded w-1/2"></div>
+              </div>
+            ))}
+          </div>
+        ) : googleError ? (
+          /* Error state */
+          <div className="text-center py-12 bg-amber-50 border border-amber-200 rounded-2xl">
+            <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+            </div>
+            <p className="text-amber-700 font-medium mb-2">
+              Nearby hotels temporarily unavailable
+            </p>
+            <p className="text-sm text-amber-600 max-w-md mx-auto">
+              The server is busy right now. Please try again in a few minutes.
+            </p>
+          </div>
+        ) : googleHotels.length === 0 ? (
+          /* Empty state */
+          <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
+            <p className="text-gray-500 mb-2">No hotels found in this area.</p>
+            <p className="text-sm text-gray-400">Try increasing the radius.</p>
+          </div>
+        ) : (
+          /* Hotels grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {googleHotels.map((place) => (
+              <div key={place.id} className="google-card-item">
+                <GoogleHotelCard place={place} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* HOW IT WORKS */}
-      <section ref={stepsRef} className="px-6 py-24 bg-gray-900 text-white relative overflow-hidden">
+      <section
+        ref={stepsRef}
+        className="px-6 py-24 bg-gray-900 text-white relative overflow-hidden"
+      >
         <div className="absolute -top-40 -right-40 w-96 h-96 border border-teal-700/20 rounded-full" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 border border-teal-700/10 rounded-full" />
         <div className="relative max-w-6xl mx-auto">
@@ -442,7 +497,7 @@ const Home = () => {
                 AK
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
+                <p className="text-sm font-medium text-gray-900">Ayesha K.</p>
                 <p className="text-xs text-gray-500">Peshawar local</p>
               </div>
             </div>
