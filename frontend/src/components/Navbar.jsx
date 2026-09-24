@@ -6,7 +6,9 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  const isDetailPage = location.pathname.startsWith('/hotel/');
+  const isDetailPage =
+    location.pathname.startsWith('/hotel/') ||
+    location.pathname.startsWith('/google-hotel/');
   const isHomePage = location.pathname === '/';
 
   useEffect(() => {
@@ -37,13 +39,12 @@ const Navbar = () => {
     { name: 'Search', path: '/search' },
     { name: 'About', path: '/about' },
     { name: 'Gallery', path: '/gallery' },
-    { name: 'Contact', path: '/contact' },
+    { name: 'Contact', path: '/contact' }
   ];
 
-  // solid = scrolled, ya detail page, ya mobile menu open, ya non-home page
+  // solid = scrolled, detail page, mobile open, ya non-home page
   const solid = scrolled || isDetailPage || mobileOpen || !isHomePage;
 
-  // Text color: solid ? dark : white
   const textColor = solid ? 'text-gray-700' : 'text-white/90';
   const textActive = solid ? 'text-teal-700' : 'text-teal-300';
   const textHover = solid ? 'hover:text-teal-700' : 'hover:text-white';
@@ -62,7 +63,9 @@ const Navbar = () => {
           <Link
             to="/"
             className={`font-serif text-lg md:text-xl transition-colors ${
-              solid ? 'text-gray-900 hover:text-teal-700' : 'text-white hover:text-teal-300'
+              solid
+                ? 'text-gray-900 hover:text-teal-700'
+                : 'text-white hover:text-teal-300'
             }`}
             onClick={() => setMobileOpen(false)}
           >
@@ -129,19 +132,35 @@ const Navbar = () => {
           mobileOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
+        {/* ═══════════════════════════════════════ */}
+        {/* HEADER — PHF brand (Menu ki jagah)     */}
+        {/* ═══════════════════════════════════════ */}
         <div className="px-6 py-5 border-b border-gray-200 flex items-center justify-between">
-          <p className="font-serif text-lg text-gray-900">Menu</p>
+          <div>
+            <p className="font-serif text-xl text-gray-900">PHF</p>
+            <p className="text-[10px] tracking-[0.15em] uppercase text-gray-400 mt-0.5">
+              Peshawar Hotel Finder
+            </p>
+          </div>
           <button
             onClick={() => setMobileOpen(false)}
             className="text-gray-500 hover:text-gray-900 transition p-1"
             aria-label="Close menu"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
 
+        {/* Links */}
         <nav className="px-6 py-6 space-y-1">
           {links.map((link, index) => (
             <Link
@@ -152,14 +171,23 @@ const Navbar = () => {
                 location.pathname === link.path
                   ? 'text-teal-700 font-medium'
                   : 'text-gray-800 hover:text-teal-700'
-              } ${mobileOpen ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'}`}
-              style={{ transitionDelay: mobileOpen ? `${index * 50 + 100}ms` : '0ms' }}
+              } ${
+                mobileOpen
+                  ? 'opacity-100 translate-x-0'
+                  : 'opacity-0 translate-x-4'
+              }`}
+              style={{
+                transitionDelay: mobileOpen
+                  ? `${index * 50 + 100}ms`
+                  : '0ms'
+              }}
             >
               {link.name}
             </Link>
           ))}
         </nav>
 
+        {/* CTA */}
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-200">
           <a
             href="https://wa.me/923351092493?text=Assalam%20o%20Alaikum%2C%20mujhe%20apna%20hotel%20list%20karwana%20hai."
