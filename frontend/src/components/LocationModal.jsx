@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 
 const LocationModal = ({ onLocationSet }) => {
   const [show, setShow] = useState(false);
-  const [step, setStep] = useState('ask'); // ask | detecting | detected
+  const [step, setStep] = useState('ask');
   const [detectedLocation, setDetectedLocation] = useState(null);
   const [mounted, setMounted] = useState(false);
 
@@ -11,22 +11,61 @@ const LocationModal = ({ onLocationSet }) => {
     setMounted(true);
   }, []);
 
+  // ═══════════════════════════════════════════════════
+  // SMART GEOLOCATION — Fast + Accurate
+  // ═══════════════════════════════════════════════════
+  const getLocationFast = (onSuccess, onError) => {
+    // Step 1: Fast low-accuracy location (WiFi/Cell — 1-2 sec)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        console.log('Fast location:', pos.coords.latitude, pos.coords.longitude);
+        onSuccess(pos, false); // false = not high accuracy
+
+        // Step 2: Background high-accuracy update (GPS — 5-10 sec)
+        navigator.geolocation.getCurrentPosition(
+          (accuratePos) => {
+            console.log('Accurate location:', accuratePos.coords.latitude, accuratePos.coords.longitude);
+            onSuccess(accuratePos, true); // true = high accuracy
+          },
+          (err) => {
+            console.log('High accuracy failed, using fast location');
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 30000 // 30 sec cache
+          }
+        );
+      },
+      (err) => {
+        console.error('Fast location failed:', err.message);
+        onError(err);
+      },
+      {
+        enableHighAccuracy: false, // ← WiFi/Cell (fast)
+        timeout: 5000,             // ← 5 sec max
+        maximumAge: 60000          // ← 60 sec cache allowed (fast)
+      }
+    );
+  };
+
+  // ═══════════════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════════════
   useEffect(() => {
     const initLocation = async () => {
       const saved = localStorage.getItem('userLocation');
       const permissionAsked = localStorage.getItem('locationPermissionAsked');
+      const permissionState = localStorage.getItem('locationPermissionState');
 
-      // SCENARIO 1: Pehli baar user aaya
+      // Pehli baar — popup dikhao
       if (!permissionAsked) {
         const timer = setTimeout(() => setShow(true), 800);
         return () => clearTimeout(timer);
       }
 
-      // SCENARIO 2: User ne "Not now" kiya tha (denied)
-      const permissionState = localStorage.getItem('locationPermissionState');
-      
+      // User ne "Not now" kiya tha — Peshawar default
       if (permissionState === 'denied') {
-        // default location
         if (saved) {
           const { lat, lng, label } = JSON.parse(saved);
           onLocationSet({ lat, lng, label });
@@ -40,8 +79,7 @@ const LocationModal = ({ onLocationSet }) => {
         return;
       }
 
-      // 3  User ne "Allow" kiya tha
-      // Browser permission check karo
+      // User ne "Allow" kiya tha — silently nayi location lo
       if (navigator.permissions) {
         try {
           const result = await navigator.permissions.query({
@@ -49,51 +87,57 @@ const LocationModal = ({ onLocationSet }) => {
           });
 
           if (result.state === 'granted') {
-            // Permission granted hai — silently nayi location lo
-            console.log('Permission granted — fetching fresh location silently...');
+            console.log('Permission granted — fetching fresh location...');
 
-            navigator.geolocation.getCurrentPosition(
-              async (pos) => {
+            getLocationFast(
+              async (pos, isAccurate) => {
                 const { latitude, longitude } = pos.coords;
 
-                console.log('=== Fresh GPS ===');
-                console.log('Lat:', latitude, 'Lng:', longitude);
+                const newLoc = {
+                  lat: latitude,
+                  lng: longitude,
+                  label: isAccurate ? 'Your location' : 'Locating...',
+                  timestamp: Date.now()
+                };
 
+                // Agar first time (fast location) — cache use karo taake turant dikhe
+                if (!isAccurate && saved) {
+                  const cached = JSON.parse(saved);
+                  onLocationSet(cached); // Purani label use karo
+                }
+
+                // Reverse geocode
                 const areaName = await reverseGeocode(latitude, longitude);
 
-                const newLoc = {
+                const finalLoc = {
                   lat: latitude,
                   lng: longitude,
                   label: areaName || 'Your location',
                   timestamp: Date.now()
                 };
 
-                localStorage.setItem('userLocation', JSON.stringify(newLoc));
-                onLocationSet(newLoc);
+                localStorage.setItem(
+                  'userLocation',
+                  JSON.stringify(finalLoc)
+                );
+                onLocationSet(finalLoc);
               },
               (err) => {
-                // GPS fail — cached use karo
-                console.log('GPS failed, using cache:', err.message);
+                console.log('Geolocation failed, using cache');
                 if (saved) {
                   const { lat, lng, label } = JSON.parse(saved);
                   onLocationSet({ lat, lng, label });
                 }
-              },
-              {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0 // ← Force fresh location, cache nahi
               }
             );
           } else if (result.state === 'denied') {
-            // Browser-level deny — Peshawar default
             onLocationSet({
               lat: 34.0151,
               lng: 71.5249,
               label: 'Peshawar City Center'
             });
           } else {
-            // Prompt state — user ne decide nahi kiya
+            // Prompt state
             if (saved) {
               const { lat, lng, label } = JSON.parse(saved);
               onLocationSet({ lat, lng, label });
@@ -102,7 +146,6 @@ const LocationModal = ({ onLocationSet }) => {
             }
           }
         } catch (err) {
-          // permissions API fail — cached use karo
           console.error('Permissions API failed:', err);
           if (saved) {
             const { lat, lng, label } = JSON.parse(saved);
@@ -110,7 +153,6 @@ const LocationModal = ({ onLocationSet }) => {
           }
         }
       } else {
-        // Browser permissions API support nahi — cached use karo
         if (saved) {
           const { lat, lng, label } = JSON.parse(saved);
           onLocationSet({ lat, lng, label });
@@ -214,8 +256,8 @@ const LocationModal = ({ onLocationSet }) => {
     setStep('detecting');
 
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
+      getLocationFast(
+        async (pos, isAccurate) => {
           const { latitude, longitude } = pos.coords;
           const areaName = await reverseGeocode(latitude, longitude);
 
@@ -228,14 +270,13 @@ const LocationModal = ({ onLocationSet }) => {
           setDetectedLocation(detected);
           setStep('detected');
 
-          // Save permission state
           localStorage.setItem('locationPermissionAsked', 'true');
           localStorage.setItem('locationPermissionState', 'granted');
 
           setTimeout(() => {
             saveLocation(detected);
             setShow(false);
-          }, 1800);
+          }, 1200); // 1.2 sec — pehle 1.8 sec tha
         },
         async () => {
           const fallback = {
@@ -252,7 +293,7 @@ const LocationModal = ({ onLocationSet }) => {
           setTimeout(() => {
             saveLocation(fallback);
             setShow(false);
-          }, 1800);
+          }, 1200);
         }
       );
     } else {
