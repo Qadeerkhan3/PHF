@@ -30,7 +30,6 @@ const Home = () => {
   const [googleHotels, setGoogleHotels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
-  const [googleError, setGoogleError] = useState(false);
   const [location, setLocation] = useState({
     lat: PESHAWAR_LAT,
     lng: PESHAWAR_LNG,
@@ -56,7 +55,6 @@ const Home = () => {
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
-      setGoogleError(false);
 
       let dbResults = [];
 
@@ -80,7 +78,7 @@ const Home = () => {
 
       if (isMounted) setLoading(false);
 
-      // ─── 2. Google hotels (Overpass — har jagah) ───
+      // ─── 2. Google hotels (Overpass) ───
       try {
         const googleRes = await getNearbyGoogleHotels(
           location.lat,
@@ -105,18 +103,12 @@ const Home = () => {
           return true;
         });
 
-        if (isMounted) {
-          setGoogleHotels(uniqueGoogle);
-          setGoogleError(false);
-        }
+        if (isMounted) setGoogleHotels(uniqueGoogle);
       } catch (err) {
         console.error('Google fetch failed:', err);
-        if (isMounted) {
-          setGoogleHotels([]);
-          setGoogleError(true);
-        }
+        if (isMounted) setGoogleHotels([]);
       } finally {
-        if (isMounted) setLoadingGoogle(false);
+        if (isMounted) setLoadingGoogle(false); // ← YEH ZAROORI HAI
       }
     };
 
@@ -362,7 +354,7 @@ const Home = () => {
         </section>
       )}
 
-      {/* GOOGLE HOTELS — Loading skeleton → hotels OR error */}
+      {/* GOOGLE HOTELS */}
       <section
         ref={googleRef}
         className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
@@ -389,7 +381,6 @@ const Home = () => {
         </div>
 
         {loadingGoogle ? (
-          /* Loading skeleton */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
@@ -399,30 +390,14 @@ const Home = () => {
               </div>
             ))}
           </div>
-        ) : googleError ? (
-          /* Error state */
-          <div className="text-center py-12 bg-amber-50 border border-amber-200 rounded-2xl">
-            <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 8v4M12 16h.01" />
-              </svg>
-            </div>
-            <p className="text-amber-700 font-medium mb-2">
-              Nearby hotels temporarily unavailable
-            </p>
-            <p className="text-sm text-amber-600 max-w-md mx-auto">
-              The server is busy right now. Please try again in a few minutes.
-            </p>
-          </div>
         ) : googleHotels.length === 0 ? (
-          /* Empty state */
           <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
             <p className="text-gray-500 mb-2">No hotels found in this area.</p>
-            <p className="text-sm text-gray-400">Try increasing the radius.</p>
+            <p className="text-sm text-gray-400">
+              Try increasing the radius.
+            </p>
           </div>
         ) : (
-          /* Hotels grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {googleHotels.map((place) => (
               <div key={place.id} className="google-card-item">

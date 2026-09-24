@@ -3,15 +3,6 @@ const router = express.Router();
 const axios = require('axios');
 const Hotel = require('../models/Hotel');
 
-// ═══════════════════════════════════════════════════
-// OVERPASS API MIRRORS
-// ═══════════════════════════════════════════════════
-const OVERPASS_MIRRORS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter'
-];
-
 // ─── Nearby hotels (from DB) ───
 router.get('/nearby', async (req, res) => {
   try {
@@ -39,7 +30,7 @@ router.get('/nearby-google', async (req, res) => {
   try {
     const { lat, lng, radius = 3000 } = req.query;
 
-    console.log('\n=== Overpass API Request ===');
+    console.log('=== Overpass API Request ===');
     console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
     // ✅ SIRF HOTEL aur GUEST_HOUSE — hostel aur motel nahi
@@ -53,81 +44,53 @@ router.get('/nearby-google', async (req, res) => {
       out body center;
     `;
 
-    // ─── Retry Logic with Multiple Mirrors ───
+    // ─── Simple retry — 2 mirrors, 1 attempt each, 8 sec timeout ───
     let response = null;
     let lastError = null;
 
-    for (
-      let mirrorIndex = 0;
-      mirrorIndex < OVERPASS_MIRRORS.length;
-      mirrorIndex++
-    ) {
-      const mirror = OVERPASS_MIRRORS[mirrorIndex];
-      console.log(
-        `\n--- Trying mirror ${mirrorIndex + 1}: ${mirror} ---`
-      );
+    const mirrors = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter'
+    ];
 
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          console.log(`Attempt ${attempt}/2...`);
+    for (const mirror of mirrors) {
+      try {
+        console.log(`Trying: ${mirror}`);
 
-          response = await axios.post(
-            mirror,
-            `data=${encodeURIComponent(overpassQuery)}`,
-            {
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'PHF-App/1.0'
-              },
-              timeout: 40000
-            }
-          );
-
-          console.log(
-            `✓ Success on mirror ${mirrorIndex + 1}, attempt ${attempt}`
-          );
-          break;
-        } catch (err) {
-          lastError = err;
-          const status = err.response?.status;
-          console.log(`✗ Failed: ${status || err.message}`);
-
-          if ([504, 429, 503, 500].includes(status)) {
-            if (attempt < 2) {
-              console.log('Waiting 3 seconds before retry...');
-              await new Promise((resolve) => setTimeout(resolve, 3000));
-              continue;
-            }
-          } else {
-            console.log('Non-retryable error, moving to next mirror...');
-            break;
+        response = await axios.post(
+          mirror,
+          `data=${encodeURIComponent(overpassQuery)}`,
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': 'PHF-App/1.0'
+            },
+            timeout: 8000
           }
-        }
-      }
+        );
 
-      if (response) break;
-
-      if (mirrorIndex < OVERPASS_MIRRORS.length - 1) {
-        console.log('Waiting 2 seconds before next mirror...');
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        console.log(`✓ Success on ${mirror}`);
+        break;
+      } catch (err) {
+        lastError = err;
+        console.log(
+          `✗ Failed ${mirror}: ${err.response?.status || err.message}`
+        );
       }
     }
 
     if (!response) {
-      console.error('=== All Overpass mirrors failed ===');
       throw lastError;
     }
 
     const elements = response.data.elements || [];
-    console.log('\nRaw elements found:', elements.length);
+    console.log('Raw elements:', elements.length);
 
-    // Transform data
     const places = elements
       .filter((el) => el.tags && el.tags.name)
       .map((el) => {
         const elemLat = el.lat || el.center?.lat;
         const elemLng = el.lon || el.center?.lon;
-
         if (!elemLat || !elemLng) return null;
 
         return {
@@ -158,27 +121,21 @@ router.get('/nearby-google', async (req, res) => {
       })
       .filter(Boolean);
 
-    // Duplicates remove
     const uniquePlaces = places.filter(
       (place, index, self) =>
         index ===
         self.findIndex((p) => p.displayName.text === place.displayName.text)
     );
 
-    console.log('Unique places returned:', uniquePlaces.length);
-
+    console.log('Returning:', uniquePlaces.length);
     res.json(uniquePlaces);
   } catch (err) {
-    console.error('\n=== Overpass API FINAL ERROR ===');
+    console.error('=== Overpass FINAL ERROR ===');
     console.error('Status:', err.response?.status);
     console.error('Message:', err.message);
 
-    res.status(500).json({
-      error: 'Failed to fetch nearby hotels from OpenStreetMap',
-      details: err.response?.status
-        ? `Server busy (${err.response.status}). Please try again in a moment.`
-        : err.message
-    });
+    // Empty array return karo — frontend friendly message dikhayega
+    res.json([]);
   }
 });
 
