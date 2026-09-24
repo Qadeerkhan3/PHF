@@ -35,7 +35,7 @@ const Home = () => {
     lng: PESHAWAR_LNG,
     label: 'Peshawar City Center'
   });
-  const [radius, setRadius] = useState(3000);
+  const [radius, setRadius] = useState(8000);
 
   const heroRef = useRef(null);
   const hotelsRef = useRef(null);
@@ -47,18 +47,28 @@ const Home = () => {
     getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
 
   // ═══════════════════════════════════════════════════
-  // FETCH — DB + Google (Overpass)
+  // FETCH — DB + Google (with HARD TIMEOUT)
   // ═══════════════════════════════════════════════════
   useEffect(() => {
     let isMounted = true;
+    let hardTimeoutId;
 
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
 
+      // HARD TIMEOUT — 12 sec baad force loading false
+      hardTimeoutId = setTimeout(() => {
+        if (isMounted) {
+          console.log('⏰ Hard timeout — forcing loading false');
+          setLoading(false);
+          setLoadingGoogle(false);
+        }
+      }, 12000);
+
       let dbResults = [];
 
-      // ─── 1. DB hotels (sirf Peshawar mein) ───
+      // ─── 1. DB hotels ───
       if (isUserInPeshawar) {
         try {
           const dbRes = await getNearbyHotels(
@@ -86,6 +96,7 @@ const Home = () => {
           radius
         );
 
+        // Duplicates remove (name match)
         const dbNames = new Set(
           (isUserInPeshawar ? dbResults : []).map((h) =>
             h.name.toLowerCase().trim()
@@ -108,7 +119,10 @@ const Home = () => {
         console.error('Google fetch failed:', err);
         if (isMounted) setGoogleHotels([]);
       } finally {
-        if (isMounted) setLoadingGoogle(false); // ← YEH ZAROORI HAI
+        if (isMounted) {
+          setLoadingGoogle(false);
+          if (hardTimeoutId) clearTimeout(hardTimeoutId);
+        }
       }
     };
 
@@ -116,6 +130,7 @@ const Home = () => {
 
     return () => {
       isMounted = false;
+      if (hardTimeoutId) clearTimeout(hardTimeoutId);
     };
   }, [location, radius, isUserInPeshawar]);
 
@@ -270,13 +285,13 @@ const Home = () => {
             <input
               type="range"
               min="1000"
-              max="8000"
+              max="15000"
               step="1000"
               value={radius}
               onChange={(e) => setRadius(parseInt(e.target.value))}
               className="w-40 accent-teal-700"
             />
-            <span className="text-xs text-gray-500">8km</span>
+            <span className="text-xs text-gray-500">15km</span>
           </div>
         </div>
       </section>
@@ -381,6 +396,7 @@ const Home = () => {
         </div>
 
         {loadingGoogle ? (
+          /* Loading skeleton */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
@@ -391,13 +407,44 @@ const Home = () => {
             ))}
           </div>
         ) : googleHotels.length === 0 ? (
-          <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
-            <p className="text-gray-500 mb-2">No hotels found in this area.</p>
-            <p className="text-sm text-gray-400">
-              Try increasing the radius.
+          /* Friendly empty state */
+          <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl">
+            <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
+                <rect x="4" y="2" width="16" height="20" rx="2" />
+                <path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01" />
+              </svg>
+            </div>
+            <h3 className="font-serif text-2xl text-gray-900 mb-3">
+              No hotels found on OpenStreetMap
+            </h3>
+            <p className="text-sm text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
+              We couldn't find hotels in this area on OpenStreetMap. Try
+              increasing the radius above, or search directly on Google Maps.
             </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+              <a
+                href={`https://www.google.com/maps/search/hotels/@${location.lat},${location.lng},14z`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white px-6 py-3 rounded-full text-sm font-medium transition"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                Search on Google Maps
+              </a>
+              <button
+                onClick={() => setRadius(15000)}
+                className="text-sm text-teal-700 hover:text-teal-800 font-medium underline"
+              >
+                Increase radius to 15km
+              </button>
+            </div>
           </div>
         ) : (
+          /* Hotels grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {googleHotels.map((place) => (
               <div key={place.id} className="google-card-item">

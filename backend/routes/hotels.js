@@ -33,54 +33,37 @@ router.get('/nearby-google', async (req, res) => {
     console.log('=== Overpass API Request ===');
     console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
-    // ✅ SIRF HOTEL aur GUEST_HOUSE — hostel aur motel nahi
+    // PURANI CONDITION — sab tourism types
     const overpassQuery = `
       [out:json][timeout:25];
       (
-        node["tourism"~"hotel|guest_house"](around:${radius},${lat},${lng});
-        way["tourism"~"hotel|guest_house"](around:${radius},${lat},${lng});
+        node["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
+        way["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
         node["building"="hotel"](around:${radius},${lat},${lng});
       );
       out body center;
     `;
 
-    // ─── Simple retry — 2 mirrors, 1 attempt each, 8 sec timeout ───
+    // Vercel 10s limit ke andar — 6 sec timeout
     let response = null;
-    let lastError = null;
 
-    const mirrors = [
-      'https://overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter'
-    ];
+    try {
+      response = await axios.post(
+        'https://overpass-api.de/api/interpreter',
+        `data=${encodeURIComponent(overpassQuery)}`,
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'PHF-App/1.0'
+          },
+          timeout: 6000
+        }
+      );
 
-    for (const mirror of mirrors) {
-      try {
-        console.log(`Trying: ${mirror}`);
-
-        response = await axios.post(
-          mirror,
-          `data=${encodeURIComponent(overpassQuery)}`,
-          {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'User-Agent': 'PHF-App/1.0'
-            },
-            timeout: 8000
-          }
-        );
-
-        console.log(`✓ Success on ${mirror}`);
-        break;
-      } catch (err) {
-        lastError = err;
-        console.log(
-          `✗ Failed ${mirror}: ${err.response?.status || err.message}`
-        );
-      }
-    }
-
-    if (!response) {
-      throw lastError;
+      console.log('✓ Overpass success');
+    } catch (err) {
+      console.log('✗ Overpass failed:', err.response?.status || err.message);
+      return res.json([]);
     }
 
     const elements = response.data.elements || [];
@@ -116,7 +99,8 @@ router.get('/nearby-google', async (req, res) => {
           googleMapsUri: `https://www.openstreetmap.org/${el.type}/${el.id}`,
           location: { latitude: elemLat, longitude: elemLng },
           photos: [],
-          source: 'OpenStreetMap'
+          source: 'OpenStreetMap',
+          type: el.tags.tourism || 'hotel'
         };
       })
       .filter(Boolean);
@@ -134,12 +118,11 @@ router.get('/nearby-google', async (req, res) => {
     console.error('Status:', err.response?.status);
     console.error('Message:', err.message);
 
-    // Empty array return karo — frontend friendly message dikhayega
     res.json([]);
   }
 });
 
-// ─── Google Photo Proxy (compatibility) ───
+// ─── Google Photo Proxy ───
 router.get('/photo-proxy', async (req, res) => {
   try {
     const { name } = req.query;
