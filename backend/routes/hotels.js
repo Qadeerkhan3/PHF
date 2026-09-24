@@ -4,7 +4,7 @@ const axios = require('axios');
 const Hotel = require('../models/Hotel');
 
 // ═══════════════════════════════════════════════════
-// OVERPASS API MIRRORS (agar ek fail ho toh doosra try karo)
+// OVERPASS API MIRRORS
 // ═══════════════════════════════════════════════════
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
@@ -42,12 +42,12 @@ router.get('/nearby-google', async (req, res) => {
     console.log('\n=== Overpass API Request ===');
     console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
-    // Overpass query — hotels, guest houses, hostels, motels
+    // ✅ SIRF HOTEL aur GUEST_HOUSE — hostel aur motel nahi
     const overpassQuery = `
       [out:json][timeout:25];
       (
-        node["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
-        way["tourism"~"hotel|guest_house|hostel|motel"](around:${radius},${lat},${lng});
+        node["tourism"~"hotel|guest_house"](around:${radius},${lat},${lng});
+        way["tourism"~"hotel|guest_house"](around:${radius},${lat},${lng});
         node["building"="hotel"](around:${radius},${lat},${lng});
       );
       out body center;
@@ -57,15 +57,19 @@ router.get('/nearby-google', async (req, res) => {
     let response = null;
     let lastError = null;
 
-    // Har mirror try karo (max 3 mirrors)
-    for (let mirrorIndex = 0; mirrorIndex < OVERPASS_MIRRORS.length; mirrorIndex++) {
+    for (
+      let mirrorIndex = 0;
+      mirrorIndex < OVERPASS_MIRRORS.length;
+      mirrorIndex++
+    ) {
       const mirror = OVERPASS_MIRRORS[mirrorIndex];
-      console.log(`\n--- Trying mirror ${mirrorIndex + 1}: ${mirror} ---`);
+      console.log(
+        `\n--- Trying mirror ${mirrorIndex + 1}: ${mirror} ---`
+      );
 
-      // Har mirror par 2 attempts (total 6 attempts)
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          console.log(`Attempt ${attempt}/2 on mirror ${mirrorIndex + 1}...`);
+          console.log(`Attempt ${attempt}/2...`);
 
           response = await axios.post(
             mirror,
@@ -79,14 +83,15 @@ router.get('/nearby-google', async (req, res) => {
             }
           );
 
-          console.log(`✓ Success on mirror ${mirrorIndex + 1}, attempt ${attempt}`);
-          break; // Success — inner loop se bahar
+          console.log(
+            `✓ Success on mirror ${mirrorIndex + 1}, attempt ${attempt}`
+          );
+          break;
         } catch (err) {
           lastError = err;
           const status = err.response?.status;
           console.log(`✗ Failed: ${status || err.message}`);
 
-          // Agar 504/429/503/500 — retry karo
           if ([504, 429, 503, 500].includes(status)) {
             if (attempt < 2) {
               console.log('Waiting 3 seconds before retry...');
@@ -94,24 +99,20 @@ router.get('/nearby-google', async (req, res) => {
               continue;
             }
           } else {
-            // Agar koi aur error (jaise 400 — invalid query), toh mirror change karo
             console.log('Non-retryable error, moving to next mirror...');
             break;
           }
         }
       }
 
-      // Agar response mil gaya toh outer loop se bahar
       if (response) break;
 
-      // Next mirror se pehle 2 second wait
       if (mirrorIndex < OVERPASS_MIRRORS.length - 1) {
         console.log('Waiting 2 seconds before next mirror...');
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
 
-    // Agar saare mirrors fail
     if (!response) {
       console.error('=== All Overpass mirrors failed ===');
       throw lastError;
@@ -120,7 +121,7 @@ router.get('/nearby-google', async (req, res) => {
     const elements = response.data.elements || [];
     console.log('\nRaw elements found:', elements.length);
 
-    // Transform Overpass data to match frontend format
+    // Transform data
     const places = elements
       .filter((el) => el.tags && el.tags.name)
       .map((el) => {
@@ -157,7 +158,7 @@ router.get('/nearby-google', async (req, res) => {
       })
       .filter(Boolean);
 
-    // Duplicates remove (same name)
+    // Duplicates remove
     const uniquePlaces = places.filter(
       (place, index, self) =>
         index ===
