@@ -361,10 +361,7 @@ const Home = () => {
         </section>
       )}
 
-      {/* ═══════════════════════════════════════════════════ */}
       {/* GOOGLE HOTELS — FIXED: Render order reversed       */}
-      {/* Pehle hotels, phir loading, phir empty             */}
-      {/* ═══════════════════════════════════════════════════ */}
       <section
         ref={googleRef}
         className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
@@ -515,7 +512,7 @@ const Home = () => {
                 AK
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Ayesha K.</p>
+                <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
                 <p className="text-xs text-gray-500">Peshawar local</p>
               </div>
             </div>
