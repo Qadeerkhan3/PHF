@@ -47,7 +47,7 @@ const Home = () => {
     getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
 
   // ═══════════════════════════════════════════════════
-  // FETCH — DB + Google
+  // FETCH — DB + Google (Geoapify)
   // ═══════════════════════════════════════════════════
   useEffect(() => {
     let isMounted = true;
@@ -88,7 +88,7 @@ const Home = () => {
 
       if (isMounted) setLoading(false);
 
-      // ─── 2. Google hotels ───
+      // ─── 2. Google hotels (Geoapify) ───
       try {
         const googleRes = await getNearbyGoogleHotels(
           location.lat,
@@ -118,6 +118,7 @@ const Home = () => {
         console.error('Google fetch failed:', err);
         if (isMounted) setGoogleHotels([]);
       } finally {
+        // ← YEH ZAROORI HAI — hamesha false karo
         if (isMounted) {
           setLoadingGoogle(false);
           if (hardTimeoutId) clearTimeout(hardTimeoutId);
@@ -134,14 +135,15 @@ const Home = () => {
   }, [location.lat, location.lng, radius, isUserInPeshawar]);
 
   // ═══════════════════════════════════════════════════
-  // ANIMATIONS
+  // ANIMATIONS (Hero + DB + Steps + Testimonial)
+  // Google section — NO animation (cards turant visible)
   // ═══════════════════════════════════════════════════
   useEffect(() => {
     const ctx = gsap.context(() => {
-      gsap.from('.hero-eyebrow', { y: 20, opacity: 0, duration: 0.8, delay: 0.2 });
-      gsap.from('.hero-title', { y: 40, opacity: 0, duration: 1, delay: 0.4 });
-      gsap.from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.8, delay: 0.7 });
-      gsap.from('.hero-divider', { scaleX: 0, opacity: 0, duration: 1, delay: 1 });
+      gsap.from('.hero-eyebrow', { y: 20, opacity: 0, duration: 0.8, delay: 0.2, clearProps: 'all' });
+      gsap.from('.hero-title', { y: 40, opacity: 0, duration: 1, delay: 0.4, clearProps: 'all' });
+      gsap.from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.8, delay: 0.7, clearProps: 'all' });
+      gsap.from('.hero-divider', { scaleX: 0, opacity: 0, duration: 1, delay: 1, clearProps: 'all' });
       gsap.to('.hero-bg', {
         scale: 1.1,
         duration: 12,
@@ -158,61 +160,52 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    if (!loading && dbHotels.length > 0 && hotelsRef.current) {
+    if (loading || dbHotels.length === 0 || !hotelsRef.current) return;
+    const timeoutId = setTimeout(() => {
       const ctx = gsap.context(() => {
         gsap.from('.hotel-card-item', {
-          y: 40,
+          y: 30,
           opacity: 0,
-          duration: 0.6,
-          stagger: 0.1,
-          scrollTrigger: {
-            trigger: hotelsRef.current,
-            start: 'top 80%'
-          }
+          duration: 0.5,
+          stagger: 0.08,
+          clearProps: 'all'
         });
       }, hotelsRef);
       return () => ctx.revert();
-    }
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [loading, dbHotels]);
 
   useEffect(() => {
-    if (googleHotels.length > 0 && googleRef.current) {
-      const ctx = gsap.context(() => {
-        gsap.from('.google-card-item', {
-          y: 40,
-          opacity: 0,
-          duration: 0.6,
-          stagger: 0.1,
-          scrollTrigger: {
-            trigger: googleRef.current,
-            start: 'top 80%'
-          }
-        });
-      }, googleRef);
-      return () => ctx.revert();
-    }
-  }, [googleHotels]);
-
-  useEffect(() => {
+    if (!stepsRef.current) return;
     const ctx = gsap.context(() => {
       gsap.from('.step-item', {
-        y: 40,
+        y: 30,
         opacity: 0,
-        duration: 0.8,
-        stagger: 0.2,
-        scrollTrigger: { trigger: stepsRef.current, start: 'top 75%' }
+        duration: 0.6,
+        stagger: 0.15,
+        clearProps: 'all',
+        scrollTrigger: {
+          trigger: stepsRef.current,
+          start: 'top 85%'
+        }
       });
     }, stepsRef);
     return () => ctx.revert();
   }, []);
 
   useEffect(() => {
+    if (!testimonialRef.current) return;
     const ctx = gsap.context(() => {
       gsap.from('.testimonial-content', {
-        y: 40,
+        y: 30,
         opacity: 0,
-        duration: 0.8,
-        scrollTrigger: { trigger: testimonialRef.current, start: 'top 80%' }
+        duration: 0.6,
+        clearProps: 'all',
+        scrollTrigger: {
+          trigger: testimonialRef.current,
+          start: 'top 85%'
+        }
       });
     }, testimonialRef);
     return () => ctx.revert();
@@ -368,7 +361,10 @@ const Home = () => {
         </section>
       )}
 
-      {/* GOOGLE HOTELS — FIXED: hotels pehle, phir loading, phir empty */}
+      {/* ═══════════════════════════════════════════════════ */}
+      {/* GOOGLE HOTELS — FIXED: Render order reversed       */}
+      {/* Pehle hotels, phir loading, phir empty             */}
+      {/* ═══════════════════════════════════════════════════ */}
       <section
         ref={googleRef}
         className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
@@ -382,7 +378,7 @@ const Home = () => {
               {isUserInPeshawar ? 'More stays nearby.' : 'Hotels near you.'}
             </h2>
             <p className="text-sm text-gray-500 mt-4 max-w-xl">
-              Hotels around {location.label} — discovered via OpenStreetMap.
+              Hotels around {location.label} — discovered via Geoapify.
             </p>
           </div>
           {googleHotels.length > 0 && (
@@ -394,16 +390,18 @@ const Home = () => {
           )}
         </div>
 
-        {/* ─── FIX: Hotels pehle render karo, loading state skip ─── */}
+        {/* ✅ FIXED: Hotels pehle check karo, phir loading, phir empty */}
         {googleHotels.length > 0 ? (
+          /* Hotels mil gaye — turant render */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {googleHotels.map((place) => (
-              <div key={place.id} className="google-card-item">
+              <div key={place.id}>
                 <GoogleHotelCard place={place} />
               </div>
             ))}
           </div>
         ) : loadingGoogle ? (
+          /* Loading skeleton */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
@@ -414,6 +412,7 @@ const Home = () => {
             ))}
           </div>
         ) : (
+          /* Empty state */
           <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl">
             <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
@@ -422,11 +421,11 @@ const Home = () => {
               </svg>
             </div>
             <h3 className="font-serif text-2xl text-gray-900 mb-3">
-              No hotels found on OpenStreetMap
+              No hotels found nearby
             </h3>
             <p className="text-sm text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
-              We couldn't find hotels in this area on OpenStreetMap. Try
-              increasing the radius above, or search directly on Google Maps.
+              We couldn't find hotels in this area. Try increasing the radius
+              above, or search directly on Google Maps.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
               <a

@@ -25,105 +25,117 @@ router.get('/nearby', async (req, res) => {
   }
 });
 
-// ─── Nearby hotels (from Overpass API — OpenStreetMap) ───
+// ─── Nearby hotels (from Geoapify API) ───
 router.get('/nearby-google', async (req, res) => {
   try {
     const { lat, lng, radius = 3000 } = req.query;
 
-    console.log('=== Overpass API Request ===');
+    console.log('=== Geoapify API Request ===');
     console.log('Lat:', lat, 'Lng:', lng, 'Radius:', radius);
 
-    // ⚡ FAST query — timeout 8s, sirf hotel aur guest_house, nodes only
-    const overpassQuery = `
-      [out:json][timeout:8];
-      (
-        node["tourism"="hotel"](around:${radius},${lat},${lng});
-        node["tourism"="guest_house"](around:${radius},${lat},${lng});
-      );
-      out body center;
-    `;
+    const apiKey = process.env.GEOAPIFY_API_KEY;
 
-    // Single mirror, 7 sec timeout (Vercel 10s limit ke andar)
-    let response = null;
+    if (!apiKey) {
+      console.error('GEOAPIFY_API_KEY missing in .env');
+      return res.status(500).json({ error: 'Geoapify API key not configured' });
+    }
 
-    try {
-      console.log('Trying overpass-api.de...');
+    //  Nearby Hotels Search
+    
+    const searchUrl = `https://api.geoapify.com/v2/places?categories=accommodation.hotel,accommodation.guest_house&filter=circle:${lng},${lat},${radius}&bias=proximity:${lng},${lat}&limit=20&lang=en&apiKey=${apiKey}`;
 
-      response = await axios.post(
-        'https://overpass-api.de/api/interpreter',
-        `data=${encodeURIComponent(overpassQuery)}`,
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'PHF-App/1.0'
-          },
-          timeout: 7000
-        }
-      );
+    console.log('Geoapify search URL:', searchUrl);
 
-      console.log('✓ Overpass success');
-    } catch (err) {
-      console.log('✗ Overpass failed:', err.response?.status || err.message);
+    const searchResponse = await axios.get(searchUrl, {
+      timeout: 8000 // Vercel 10s limit ke andar rehne ke liye 8 sec
+    });
+
+    const features = searchResponse.data.features || [];
+    console.log('Hotels found nearby:', features.length);
+
+    if (features.length === 0) {
       return res.json([]);
     }
 
-    const elements = response.data.elements || [];
-    console.log('Raw elements:', elements.length);
+    // ─── Step 2: Fetch Website for each hotel (Place Details API) ───
+    // Har hotel ka place_id lekar website nikalo (Parallel mein)
+    const detailedPlaces = await Promise.all(
+      features.map(async (feature) => {
+        const placeId = feature.properties.place_id;
 
-    const places = elements
-      .filter((el) => el.tags && el.tags.name)
-      .map((el) => {
-        const elemLat = el.lat || el.center?.lat;
-        const elemLng = el.lon || el.center?.lon;
-        if (!elemLat || !elemLng) return null;
+        // Agar place_id nahi hai toh basic data hi do
+        if (!placeId) {
+          return mapBasicData(feature);
+        }
 
-        return {
-          id: `osm-${el.type}-${el.id}`,
-          displayName: { text: el.tags.name },
-          formattedAddress:
-            [
-              el.tags['addr:housenumber'],
-              el.tags['addr:street'],
-              el.tags['addr:city'] || 'Peshawar'
-            ]
-              .filter(Boolean)
-              .join(', ') || 'Address not available',
-          rating: null,
-          userRatingCount: null,
-          internationalPhoneNumber:
-            el.tags.phone || el.tags['contact:phone'] || null,
-          websiteUri:
-            el.tags.website ||
-            el.tags['contact:website'] ||
-            el.tags.url ||
-            null,
-          googleMapsUri: `https://www.openstreetmap.org/${el.type}/${el.id}`,
-          location: { latitude: elemLat, longitude: elemLng },
-          photos: [],
-          source: 'OpenStreetMap',
-          type: el.tags.tourism || 'hotel'
-        };
+        try {
+          // Place Details API call (website ke liye)
+          const detailsUrl = `https://api.geoapify.com/v2/place-details?id=${placeId}&apiKey=${apiKey}`;
+          
+          const detailsResponse = await axios.get(detailsUrl, {
+            timeout: 5000 // Extra timeout
+          });
+
+          const details = detailsResponse.data.features?.[0]?.properties || {};
+          
+          return {
+            id: feature.properties.place_id || `geo-${Math.random()}`,
+            displayName: { text: details.name || feature.properties.name || 'Unknown Hotel' },
+            formattedAddress: details.formatted || feature.properties.formatted || 'Address not available',
+            rating: null, // Geoapify basic search mein rating nahi hoti
+            userRatingCount: null,
+            internationalPhoneNumber: details.phone || null,
+            websiteUri: details.website || null, // <--- YEH WEBSITE FIELD HAI
+            googleMapsUri: null,
+            location: {
+              latitude: feature.geometry.coordinates[1],
+              longitude: feature.geometry.coordinates[0]
+            },
+            photos: [],
+            source: 'Geoapify'
+          };
+        } catch (err) {
+          console.error(`Details failed for place ${placeId}:`, err.message);
+          // Agar details fail ho jaye toh basic data return karo
+          return mapBasicData(feature);
+        }
       })
-      .filter(Boolean);
-
-    const uniquePlaces = places.filter(
-      (place, index, self) =>
-        index ===
-        self.findIndex((p) => p.displayName.text === place.displayName.text)
     );
 
-    console.log('Returning:', uniquePlaces.length);
-    res.json(uniquePlaces);
+    console.log('Returning detailed hotels:', detailedPlaces.length);
+    res.json(detailedPlaces);
+
   } catch (err) {
-    console.error('=== Overpass FINAL ERROR ===');
+    console.error('=== Geoapify FINAL ERROR ===');
     console.error('Status:', err.response?.status);
     console.error('Message:', err.message);
 
+    // Fallback: Agar error aaye toh empty array return karo
     res.json([]);
   }
 });
 
-// ─── Google Photo Proxy ───
+// Helper function — Basic data map karne ke liye (agar details fail ho jaye)
+function mapBasicData(feature) {
+  return {
+    id: feature.properties.place_id || `geo-${Math.random()}`,
+    displayName: { text: feature.properties.name || 'Unknown Hotel' },
+    formattedAddress: feature.properties.formatted || 'Address not available',
+    rating: null,
+    userRatingCount: null,
+    internationalPhoneNumber: null,
+    websiteUri: null,
+    googleMapsUri: null,
+    location: {
+      latitude: feature.geometry.coordinates[1],
+      longitude: feature.geometry.coordinates[0]
+    },
+    photos: [],
+    source: 'Geoapify'
+  };
+}
+
+// ─── Google Photo Proxy (compatibility) ───
 router.get('/photo-proxy', async (req, res) => {
   try {
     const { name } = req.query;
