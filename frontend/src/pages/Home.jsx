@@ -509,7 +509,7 @@ const Home = () => {
             </p>
             <div className="flex items-center justify-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-full bg-teal-700 text-white flex items-center justify-center text-sm font-medium">
-                AK
+                QK
               </div>
               <div className="text-left">
                 <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
