@@ -35,7 +35,7 @@ const Home = () => {
     lng: PESHAWAR_LNG,
     label: 'Peshawar City Center'
   });
-  const [radius, setRadius] = useState(5000);
+  const [radius, setRadius] = useState(5000); // 5km default
 
   const heroRef = useRef(null);
   const hotelsRef = useRef(null);
@@ -43,11 +43,14 @@ const Home = () => {
   const stepsRef = useRef(null);
   const testimonialRef = useRef(null);
 
+  // ✅ RANGE 25KM — sirf Peshawar ke 25km ke andar wale users ko DB hotels
   const isUserInPeshawar =
-    getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 50;
+    location.lat &&
+    location.lng &&
+    getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 25;
 
   // ═══════════════════════════════════════════════════
-  // FETCH — DB + Google (Geoapify)
+  // FETCH — DB + Google
   // ═══════════════════════════════════════════════════
   useEffect(() => {
     let isMounted = true;
@@ -68,7 +71,7 @@ const Home = () => {
 
       let dbResults = [];
 
-      // ─── 1. DB hotels ───
+      // ─── 1. DB hotels (sirf Peshawar ke 25km mein) ───
       if (isUserInPeshawar) {
         try {
           const dbRes = await getNearbyHotels(
@@ -88,7 +91,7 @@ const Home = () => {
 
       if (isMounted) setLoading(false);
 
-      // ─── 2. Google hotels (Geoapify) ───
+      // ─── 2. Google hotels (Geoapify — har jagah) ───
       try {
         const googleRes = await getNearbyGoogleHotels(
           location.lat,
@@ -118,7 +121,6 @@ const Home = () => {
         console.error('Google fetch failed:', err);
         if (isMounted) setGoogleHotels([]);
       } finally {
-        // ← YEH ZAROORI HAI — hamesha false karo
         if (isMounted) {
           setLoadingGoogle(false);
           if (hardTimeoutId) clearTimeout(hardTimeoutId);
@@ -135,8 +137,7 @@ const Home = () => {
   }, [location.lat, location.lng, radius, isUserInPeshawar]);
 
   // ═══════════════════════════════════════════════════
-  // ANIMATIONS (Hero + DB + Steps + Testimonial)
-  // Google section — NO animation (cards turant visible)
+  // ANIMATIONS
   // ═══════════════════════════════════════════════════
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -274,21 +275,22 @@ const Home = () => {
             <span className="text-xs text-gray-500 whitespace-nowrap">
               Within {(radius / 1000).toFixed(1)}km
             </span>
+            {/* ✅ RADIUS SLIDER — MAX 25KM */}
             <input
               type="range"
               min="1000"
-              max="15000"
+              max="25000"
               step="1000"
               value={radius}
               onChange={(e) => setRadius(parseInt(e.target.value))}
               className="w-40 accent-teal-700"
             />
-            <span className="text-xs text-gray-500">15km</span>
+            <span className="text-xs text-gray-500">25km</span>
           </div>
         </div>
       </section>
 
-      {/* DB HOTELS */}
+      {/* DB HOTELS — sirf Peshawar ke 25km mein */}
       {isUserInPeshawar ? (
         <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-16">
           <div className="flex items-end justify-between mb-12">
@@ -333,6 +335,7 @@ const Home = () => {
           )}
         </section>
       ) : (
+        /* NOT FOR YOUR CITY YET */
         <section className="px-6 max-w-4xl mx-auto pb-16">
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-10 md:p-12 text-center">
             <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
@@ -348,7 +351,7 @@ const Home = () => {
               We're not in your city yet.
             </h2>
             <p className="text-gray-600 max-w-lg mx-auto mb-6 leading-relaxed">
-              Peshawar Hotel Finder's curated listings are currently only available in Peshawar. We're working to expand to more cities soon. In the meantime, explore hotels discovered nearby below.
+              Peshawar Hotel Finder's curated listings are currently only available in Peshawar (25km radius). We're working to expand to more cities soon. In the meantime, explore hotels discovered nearby below.
             </p>
             <div className="inline-flex items-center gap-2 text-sm text-amber-800 bg-white/60 px-4 py-2 rounded-full">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -361,7 +364,7 @@ const Home = () => {
         </section>
       )}
 
-      {/* GOOGLE HOTELS — FIXED: Render order reversed       */}
+      {/* GOOGLE HOTELS — har jagah */}
       <section
         ref={googleRef}
         className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
@@ -375,7 +378,7 @@ const Home = () => {
               {isUserInPeshawar ? 'More stays nearby.' : 'Hotels near you.'}
             </h2>
             <p className="text-sm text-gray-500 mt-4 max-w-xl">
-              Hotels around {location.label} — discovered via Geoapify.
+              Hotels around {location.label} — discovered nearby.
             </p>
           </div>
           {googleHotels.length > 0 && (
@@ -387,9 +390,7 @@ const Home = () => {
           )}
         </div>
 
-        {/* ✅ FIXED: Hotels pehle check karo, phir loading, phir empty */}
         {googleHotels.length > 0 ? (
-          /* Hotels mil gaye — turant render */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {googleHotels.map((place) => (
               <div key={place.id}>
@@ -398,7 +399,6 @@ const Home = () => {
             ))}
           </div>
         ) : loadingGoogle ? (
-          /* Loading skeleton */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
@@ -409,7 +409,6 @@ const Home = () => {
             ))}
           </div>
         ) : (
-          /* Empty state */
           <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl">
             <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
@@ -438,10 +437,10 @@ const Home = () => {
                 Search on Google Maps
               </a>
               <button
-                onClick={() => setRadius(15000)}
+                onClick={() => setRadius(25000)}
                 className="text-sm text-teal-700 hover:text-teal-800 font-medium underline"
               >
-                Increase radius to 15km
+                Increase radius to 25km
               </button>
             </div>
           </div>
