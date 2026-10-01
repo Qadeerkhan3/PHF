@@ -310,9 +310,7 @@ const LocationModal = ({ onLocationSet }) => {
     };
   }, [show]);
 
-  // ═══════════════════════════════════════════════════
   // Skip button — 8 sec baad dikhao
-  // ═══════════════════════════════════════════════════
   useEffect(() => {
     if (step === 'detecting') {
       const timer = setTimeout(() => setShowSkip(true), 8000);
@@ -322,9 +320,7 @@ const LocationModal = ({ onLocationSet }) => {
     }
   }, [step]);
 
-  // ═══════════════════════════════════════════════════
   // User "Allow" dabata hai
-  // ═══════════════════════════════════════════════════
   const handleAllow = () => {
     setStep('detecting');
 
