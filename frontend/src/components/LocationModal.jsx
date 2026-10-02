@@ -31,16 +31,12 @@ const LocationModal = ({ onLocationSet }) => {
           nomData.address.residential ||
           nomData.address.village ||
           nomData.address.hamlet;
-
         const city = nomData.address.city || nomData.address.town;
 
         if (area && area !== city && area !== 'Peshawar') {
           return city ? `${area}, ${city}` : area;
         }
-
-        if (city) {
-          return city;
-        }
+        if (city) return city;
       }
     } catch (err) {
       console.error('Nominatim failed:', err);
@@ -58,7 +54,6 @@ const LocationModal = ({ onLocationSet }) => {
       if (locality && locality !== city) {
         return city ? `${locality}, ${city}` : locality;
       }
-
       if (city) return city;
     } catch (err) {
       console.error('BigDataCloud failed:', err);
@@ -68,18 +63,16 @@ const LocationModal = ({ onLocationSet }) => {
   };
 
   // ═══════════════════════════════════════════════════
-  // IP-BASED LOCATION — Fast, Consistent
+  // IP-BASED LOCATION — Fast, Reliable
   // ═══════════════════════════════════════════════════
   const getIPLocation = async () => {
     try {
-      console.log('📍 Getting IP-based location...');
-
+      console.log('📍 Getting IP location...');
       const apiKey = '9f600e40ec8142cf90a307b10ab1ddb2';
       const res = await fetch(
         `https://api.geoapify.com/v1/ipinfo?apiKey=${apiKey}`
       );
       const data = await res.json();
-
       console.log('IP info:', data);
 
       if (data.location?.latitude && data.location?.longitude) {
@@ -106,12 +99,10 @@ const LocationModal = ({ onLocationSet }) => {
         resolve(null);
         return;
       }
-
       console.log('📍 Getting GPS location...');
-
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          console.log('✓ GPS success:', pos.coords.latitude, pos.coords.longitude);
+          console.log('✓ GPS:', pos.coords.latitude, pos.coords.longitude);
           resolve({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
@@ -123,8 +114,8 @@ const LocationModal = ({ onLocationSet }) => {
           resolve(null);
         },
         {
-          enableHighAccuracy: true,
-          timeout: 15000,
+          enableHighAccuracy: false, // Fast
+          timeout: 10000,
           maximumAge: 0
         }
       );
@@ -132,7 +123,7 @@ const LocationModal = ({ onLocationSet }) => {
   };
 
   // ═══════════════════════════════════════════════════
-  // SMART LOCATION — IP first (fast), GPS background (accurate)
+  // SMART LOCATION — IP pehle (fast), GPS background (accurate)
   // ═══════════════════════════════════════════════════
   const getSmartLocation = async (onSuccess, onError) => {
     // ─── Step 1: IP-based location (fast) ───
@@ -146,17 +137,15 @@ const LocationModal = ({ onLocationSet }) => {
       const gpsLoc = await getGPSLocation();
 
       if (gpsLoc) {
-        // Agar GPS IP se significantly different hai
         const distance = Math.sqrt(
           Math.pow(gpsLoc.lat - ipLoc.lat, 2) +
             Math.pow(gpsLoc.lng - ipLoc.lng, 2)
         );
 
+        // Agar GPS location IP se significantly different hai
         if (distance > 0.05) {
-          // ~5km se zyada difference
           const areaName = await reverseGeocode(gpsLoc.lat, gpsLoc.lng);
-
-          console.log('✓ GPS location better:', areaName);
+          console.log('✓ GPS better:', areaName);
           onSuccess(
             {
               lat: gpsLoc.lat,
@@ -169,7 +158,7 @@ const LocationModal = ({ onLocationSet }) => {
         }
       }
     } else {
-      // IP fail — sirf GPS try karo
+      // IP fail — sirf GPS
       const gpsLoc = await getGPSLocation();
 
       if (gpsLoc) {
@@ -216,22 +205,17 @@ const LocationModal = ({ onLocationSet }) => {
           const { lat, lng, label } = JSON.parse(saved);
           onLocationSet({ lat, lng, label });
         } else {
-          // IP-based try karo
           const ipLoc = await getIPLocation();
-          if (ipLoc) {
-            onLocationSet(ipLoc);
-          } else {
-            onLocationSet({
-              lat: 34.0151,
-              lng: 71.5249,
-              label: 'Peshawar City Center'
-            });
-          }
+          onLocationSet(ipLoc || {
+            lat: 34.0151,
+            lng: 71.5249,
+            label: 'Peshawar City Center'
+          });
         }
         return;
       }
 
-      // User ne "Allow" kiya — smart location
+      // User ne "Allow" kiya — smart location (IP + GPS)
       if (navigator.permissions) {
         try {
           const result = await navigator.permissions.query({
@@ -242,11 +226,9 @@ const LocationModal = ({ onLocationSet }) => {
             getSmartLocation(
               (loc) => saveLocation(loc),
               async () => {
-                // GPS + IP dono fail — IP phir try
                 const ipLoc = await getIPLocation();
-                if (ipLoc) {
-                  onLocationSet(ipLoc);
-                } else if (saved) {
+                if (ipLoc) onLocationSet(ipLoc);
+                else if (saved) {
                   const { lat, lng, label } = JSON.parse(saved);
                   onLocationSet({ lat, lng, label });
                 } else {
@@ -260,13 +242,11 @@ const LocationModal = ({ onLocationSet }) => {
             );
           } else if (result.state === 'denied') {
             const ipLoc = await getIPLocation();
-            onLocationSet(
-              ipLoc || {
-                lat: 34.0151,
-                lng: 71.5249,
-                label: 'Peshawar City Center'
-              }
-            );
+            onLocationSet(ipLoc || {
+              lat: 34.0151,
+              lng: 71.5249,
+              label: 'Peshawar City Center'
+            });
           } else {
             if (saved) {
               const { lat, lng, label } = JSON.parse(saved);
@@ -277,23 +257,19 @@ const LocationModal = ({ onLocationSet }) => {
           }
         } catch (err) {
           const ipLoc = await getIPLocation();
-          onLocationSet(
-            ipLoc || {
-              lat: 34.0151,
-              lng: 71.5249,
-              label: 'Peshawar City Center'
-            }
-          );
-        }
-      } else {
-        const ipLoc = await getIPLocation();
-        onLocationSet(
-          ipLoc || {
+          onLocationSet(ipLoc || {
             lat: 34.0151,
             lng: 71.5249,
             label: 'Peshawar City Center'
-          }
-        );
+          });
+        }
+      } else {
+        const ipLoc = await getIPLocation();
+        onLocationSet(ipLoc || {
+          lat: 34.0151,
+          lng: 71.5249,
+          label: 'Peshawar City Center'
+        });
       }
     };
 
@@ -328,7 +304,6 @@ const LocationModal = ({ onLocationSet }) => {
     getSmartLocation(
       async (loc) => {
         const areaName = await reverseGeocode(loc.lat, loc.lng);
-
         const detected = {
           lat: loc.lat,
           lng: loc.lng,
@@ -347,7 +322,6 @@ const LocationModal = ({ onLocationSet }) => {
         }, 1200);
       },
       async () => {
-        // Saare fail — IP try
         const ipLoc = await getIPLocation();
         const fallback = ipLoc || {
           lat: 34.0151,
@@ -370,13 +344,11 @@ const LocationModal = ({ onLocationSet }) => {
 
   const handleNotNow = async () => {
     const ipLoc = await getIPLocation();
-    saveLocation(
-      ipLoc || {
-        lat: 34.0151,
-        lng: 71.5249,
-        label: 'Peshawar City Center'
-      }
-    );
+    saveLocation(ipLoc || {
+      lat: 34.0151,
+      lng: 71.5249,
+      label: 'Peshawar City Center'
+    });
     localStorage.setItem('locationPermissionAsked', 'true');
     localStorage.setItem('locationPermissionState', 'denied');
     setShow(false);
@@ -384,13 +356,11 @@ const LocationModal = ({ onLocationSet }) => {
 
   const handleSkip = async () => {
     const ipLoc = await getIPLocation();
-    saveLocation(
-      ipLoc || {
-        lat: 34.0151,
-        lng: 71.5249,
-        label: 'Peshawar City Center'
-      }
-    );
+    saveLocation(ipLoc || {
+      lat: 34.0151,
+      lng: 71.5249,
+      label: 'Peshawar City Center'
+    });
     localStorage.setItem('locationPermissionAsked', 'true');
     localStorage.setItem('locationPermissionState', 'denied');
     setShow(false);
@@ -420,27 +390,16 @@ const LocationModal = ({ onLocationSet }) => {
 
         {step === 'ask' && (
           <>
-            <p className="text-[11px] tracking-[0.15em] uppercase text-gray-500 mb-3">
-              Location
-            </p>
-            <h2 className="font-serif text-3xl text-gray-900 mb-4">
-              Allow location access?
-            </h2>
+            <p className="text-[11px] tracking-[0.15em] uppercase text-gray-500 mb-3">Location</p>
+            <h2 className="font-serif text-3xl text-gray-900 mb-4">Allow location access?</h2>
             <p className="text-sm text-gray-600 mb-8 max-w-xs mx-auto leading-relaxed">
               We'll show you hotels near you. Your location stays private and is never shared.
             </p>
-
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleAllow}
-                className="px-6 py-3 bg-teal-700 text-white text-sm rounded-lg hover:bg-teal-800 transition font-medium"
-              >
+              <button onClick={handleAllow} className="px-6 py-3 bg-teal-700 text-white text-sm rounded-lg hover:bg-teal-800 transition font-medium">
                 Allow location
               </button>
-              <button
-                onClick={handleNotNow}
-                className="px-6 py-3 border border-gray-300 text-gray-900 text-sm rounded-lg hover:bg-gray-50 transition font-medium"
-              >
+              <button onClick={handleNotNow} className="px-6 py-3 border border-gray-300 text-gray-900 text-sm rounded-lg hover:bg-gray-50 transition font-medium">
                 Not now
               </button>
             </div>
@@ -449,24 +408,14 @@ const LocationModal = ({ onLocationSet }) => {
 
         {step === 'detecting' && (
           <>
-            <p className="text-[11px] tracking-[0.15em] uppercase text-gray-500 mb-3">
-              Detecting
-            </p>
-            <h2 className="font-serif text-3xl text-gray-900 mb-4">
-              Finding your location...
-            </h2>
-            <p className="text-sm text-gray-600 mb-8">
-              This may take a few seconds.
-            </p>
+            <p className="text-[11px] tracking-[0.15em] uppercase text-gray-500 mb-3">Detecting</p>
+            <h2 className="font-serif text-3xl text-gray-900 mb-4">Finding your location...</h2>
+            <p className="text-sm text-gray-600 mb-8">This may take a few seconds.</p>
             <div className="flex justify-center mb-6">
               <div className="w-10 h-10 border-2 border-teal-700 border-t-transparent rounded-full animate-spin" />
             </div>
-
             {showSkip && (
-              <button
-                onClick={handleSkip}
-                className="text-sm text-gray-500 hover:text-gray-700 underline transition"
-              >
+              <button onClick={handleSkip} className="text-sm text-gray-500 hover:text-gray-700 underline transition">
                 Skip for now
               </button>
             )}
@@ -475,18 +424,11 @@ const LocationModal = ({ onLocationSet }) => {
 
         {step === 'detected' && detectedLocation && (
           <>
-            <p className="text-[11px] tracking-[0.15em] uppercase text-teal-700 mb-3 font-medium">
-              ✓ Location detected
-            </p>
-            <h2 className="font-serif text-2xl text-gray-900 mb-4 px-4">
-              {detectedLocation.label}
-            </h2>
-            <p className="text-sm text-gray-600 mb-6">
-              Showing hotels near you.
-            </p>
+            <p className="text-[11px] tracking-[0.15em] uppercase text-teal-700 mb-3 font-medium">✓ Location detected</p>
+            <h2 className="font-serif text-2xl text-gray-900 mb-4 px-4">{detectedLocation.label}</h2>
+            <p className="text-sm text-gray-600 mb-6">Showing hotels near you.</p>
             <div className="bg-white border border-gray-200 rounded-lg p-3 text-xs text-gray-500 font-mono">
-              📍 {detectedLocation.lat.toFixed(4)},{' '}
-              {detectedLocation.lng.toFixed(4)}
+              📍 {detectedLocation.lat.toFixed(4)}, {detectedLocation.lng.toFixed(4)}
             </div>
             <div className="mt-6 flex justify-center">
               <div className="w-2 h-2 rounded-full bg-teal-700 animate-pulse" />
