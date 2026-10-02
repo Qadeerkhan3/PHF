@@ -1,11 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { saveLead } from '../services/api';
+
+// WhatsApp number formatter
+const formatWhatsApp = (num) => {
+  let cleaned = num.replace(/[^0-9]/g, '');
+  if (cleaned.startsWith('0')) {
+    cleaned = '92' + cleaned.substring(1);
+  }
+  if (!cleaned.startsWith('92')) {
+    cleaned = '92' + cleaned;
+  }
+  return cleaned;
+};
 
 const GoogleHotelDetail = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [place, setPlace] = useState(null);
   const [heroImgError, setHeroImgError] = useState(false);
+
+  // ═══════════════════════════════════════════════════
+  // DUPLICATE PREVENTION — useRef
+  // ═══════════════════════════════════════════════════
+  const leadsSentRef = useRef(new Set());
 
   useEffect(() => {
     if (location.state?.place) {
@@ -28,91 +46,55 @@ const GoogleHotelDetail = () => {
   const rating = place.rating;
   const reviewCount = place.userRatingCount;
   const phone = place.internationalPhoneNumber;
+
+  // Website / Map logic
   const website = place.websiteUri;
+  const mapsUri = place.googleMapsUri || `https://www.openstreetmap.org/`;
 
-  // Clean phone for tel: and WhatsApp
+  const bookTarget = website || mapsUri;
+  const bookLabel = website ? 'Visit Official Website' : 'View on Map';
+
   const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : null;
-  const whatsappPhone = cleanPhone
-    ? cleanPhone.startsWith('0')
-      ? '92' + cleanPhone.substring(1)
-      : cleanPhone.startsWith('92')
-      ? cleanPhone
-      : '92' + cleanPhone
-    : null;
 
-  // Google Maps search URL
-  const googleMapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    `${name}, ${address}`
-  )}`;
+  // WhatsApp handler
+  const handleWhatsApp = async () => {
+    if (!cleanPhone) {
+      alert('WhatsApp number not available for this hotel');
+      return;
+    }
 
-  // ─── Smart CTA Logic ───
-  // Priority: Website > Phone > WhatsApp > Google Maps
-  let primaryAction = null;
+    const leadKey = `${place.id}_general`;
 
-  if (website) {
-    primaryAction = {
-      target: website,
-      label: 'Visit Official Website',
-      heading: 'Visit their official website',
-      description:
-        'This hotel has an official website. Click below to check availability, prices, and book directly.',
-      icon: 'globe',
-      external: true
-    };
-  } else if (phone) {
-    primaryAction = {
-      target: `tel:${cleanPhone}`,
-      label: 'Call Hotel',
-      heading: 'Call the hotel directly',
-      description: `Reach out to ${name} on ${phone} for bookings, availability, and prices.`,
-      icon: 'phone',
-      external: false
-    };
-  } else {
-    primaryAction = {
-      target: googleMapsSearchUrl,
-      label: 'View on Google Maps',
-      heading: 'Find them on Google Maps',
-      description:
-        'See photos, reviews, phone number, and directions on Google Maps.',
-      icon: 'map',
-      external: true
-    };
-  }
+    // Step 1: WhatsApp kholo pehle
+    const message = `Assalam o Alaikum,\n\nMujhe ${name} ke baare mein maloomat chahiye. Please availability aur prices batayein.`;
+    const whatsappNumber = formatWhatsApp(cleanPhone);
 
-  // ─── Secondary Actions (agar available hain) ───
-  const secondaryActions = [];
+    const whatsappWindow = window.open(
+      `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`,
+      '_blank'
+    );
 
-  if (website && phone) {
-    secondaryActions.push({
-      target: `tel:${cleanPhone}`,
-      label: 'Call Hotel',
-      icon: 'phone',
-      external: false
-    });
-  }
+    // Step 2: Lead save — sirf agar WhatsApp khula + duplicate nahi
+    if (whatsappWindow && !leadsSentRef.current.has(leadKey)) {
+      leadsSentRef.current.add(leadKey);
 
-  if (phone) {
-    secondaryActions.push({
-      target: `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
-        `Assalam o Alaikum, mujhe ${name} ke baare mein maloomat chahiye. Please availability aur prices batayein.`
-      )}`,
-      label: 'Chat on WhatsApp',
-      icon: 'whatsapp',
-      external: true
-    });
-  }
+      try {
+        await saveLead({
+          hotelId: place.id,
+          hotelName: name,
+          roomType: 'General Inquiry',
+          persons: 2,
+          priceShown: 0,
+          userLocation: { lat: 34.0151, lng: 71.5249 }
+        });
+        console.log('✓ Lead saved');
+      } catch (err) {
+        console.error('Lead save failed:', err);
+      }
+    }
+  };
 
-  if (website || phone) {
-    secondaryActions.push({
-      target: googleMapsSearchUrl,
-      label: 'View on Google Maps',
-      icon: 'map',
-      external: true
-    });
-  }
-
-  // ─── Unsplash fallback images ───
+  // Unsplash fallback images
   const unsplashImages = [
     'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1600&q=80',
     'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=1600&q=80',
@@ -140,41 +122,6 @@ const GoogleHotelDetail = () => {
     (getImageIndex(name) + 4) % unsplashImages.length,
     (getImageIndex(name) + 6) % unsplashImages.length
   ];
-
-  // ─── Icon helper ───
-  const renderIcon = (iconName) => {
-    if (iconName === 'globe') {
-      return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-      );
-    }
-    if (iconName === 'phone') {
-      return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-        </svg>
-      );
-    }
-    if (iconName === 'whatsapp') {
-      return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
-        </svg>
-      );
-    }
-    if (iconName === 'map') {
-      return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="min-h-screen bg-[#FAF8F5]">
@@ -212,9 +159,7 @@ const GoogleHotelDetail = () => {
 
         {rating && (
           <div className="flex items-center gap-2 mb-8">
-            <span className="text-amber-500 text-lg">
-              ★ {rating.toFixed(1)}
-            </span>
+            <span className="text-amber-500 text-lg">★ {rating.toFixed(1)}</span>
             <span className="text-sm text-gray-500">
               ({reviewCount?.toLocaleString()} reviews)
             </span>
@@ -243,22 +188,6 @@ const GoogleHotelDetail = () => {
               </a>
             </div>
           )}
-
-          {website && (
-            <div>
-              <p className="text-xs tracking-[0.15em] uppercase text-gray-500 mb-2">
-                Website
-              </p>
-              <a
-                href={website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-teal-700 hover:text-teal-800 transition break-all"
-              >
-                {website}
-              </a>
-            </div>
-          )}
         </div>
 
         {/* About */}
@@ -283,10 +212,7 @@ const GoogleHotelDetail = () => {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {galleryIndexes.map((idx, i) => (
-              <div
-                key={i}
-                className="aspect-square overflow-hidden rounded-lg"
-              >
+              <div key={i} className="aspect-square overflow-hidden rounded-lg">
                 <img
                   src={unsplashImages[idx]}
                   alt={`${name} ${i + 2}`}
@@ -298,61 +224,67 @@ const GoogleHotelDetail = () => {
           </div>
         </div>
 
-        {/* ─── CTA Section — Smart Contact Options ─── */}
+        {/* CTA Section */}
         <div className="bg-gradient-to-br from-teal-800 to-teal-600 rounded-2xl p-8 text-white text-center">
           <p className="text-xs tracking-[0.2em] text-teal-100 mb-3 font-medium">
             READY TO BOOK?
           </p>
-          <h2 className="font-serif text-3xl mb-4">{primaryAction.heading}</h2>
+          <h2 className="font-serif text-3xl mb-4">
+            {website ? 'Visit their official website' : 'Get in touch'}
+          </h2>
           <p className="text-teal-50 text-sm mb-6 max-w-md mx-auto">
-            {primaryAction.description}
+            {website
+              ? 'This hotel has an official website. Click below to check availability, prices, and book directly.'
+              : 'Contact the hotel directly via phone or WhatsApp.'}
           </p>
 
-          {/* Primary Action Button */}
-          <a
-            href={primaryAction.target}
-            {...(primaryAction.external && {
-              target: '_blank',
-              rel: 'noopener noreferrer'
-            })}
-            className="inline-flex items-center gap-2 bg-white text-teal-700 px-8 py-4 rounded-full hover:bg-teal-50 transition text-sm font-medium shadow-lg"
-          >
-            {renderIcon(primaryAction.icon)}
-            {primaryAction.label}
-          </a>
-
-          {/* Secondary Actions */}
-          {secondaryActions.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-teal-500/30">
-              <p className="text-xs tracking-[0.15em] text-teal-100 mb-4 uppercase">
-                Other ways to reach
-              </p>
-              <div className="flex flex-wrap gap-3 justify-center">
-                {secondaryActions.map((action, idx) => (
-                  <a
-                    key={idx}
-                    href={action.target}
-                    {...(action.external && {
-                      target: '_blank',
-                      rel: 'noopener noreferrer'
-                    })}
-                    className="inline-flex items-center gap-2 bg-teal-700/40 hover:bg-teal-700/60 border border-teal-400/40 text-white px-5 py-2.5 rounded-full text-sm font-medium transition backdrop-blur-sm"
-                  >
-                    {renderIcon(action.icon)}
-                    {action.label}
-                  </a>
-                ))}
-              </div>
-            </div>
+          {/* Primary Action — Website or Map */}
+          {website && (
+            <a
+              href={website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-white text-teal-700 px-8 py-4 rounded-full hover:bg-teal-50 transition text-sm font-medium shadow-lg"
+            >
+              Visit Official Website
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M7 17 17 7M7 7h10v10" />
+              </svg>
+            </a>
           )}
 
-          {/* Info Message */}
-          {!website && !phone && (
-            <p className="text-xs text-teal-100 mt-4">
-              Contact information not available. Use Google Maps to find
-              details.
+          {/* Secondary Actions — WhatsApp + Map */}
+          <div className="mt-6 pt-6 border-t border-teal-500/30">
+            <p className="text-xs tracking-[0.15em] text-teal-100 mb-4 uppercase">
+              Other ways to reach
             </p>
-          )}
+            <div className="flex flex-wrap gap-3 justify-center">
+              {cleanPhone && (
+                <button
+                  onClick={handleWhatsApp}
+                  className="inline-flex items-center gap-2 bg-teal-700/40 hover:bg-teal-700/60 border border-teal-400/40 text-white px-5 py-2.5 rounded-full text-sm font-medium transition backdrop-blur-sm"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
+                  </svg>
+                  Chat on WhatsApp
+                </button>
+              )}
+
+              <a
+                href={mapsUri}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-teal-700/40 hover:bg-teal-700/60 border border-teal-400/40 text-white px-5 py-2.5 rounded-full text-sm font-medium transition backdrop-blur-sm"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                View on Map
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
