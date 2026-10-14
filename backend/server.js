@@ -50,7 +50,7 @@ const loginLimiter = rateLimit({
 app.use('/api/admin/login', loginLimiter);
 
 // ═══════════════════════════════════════════════════
-// MONGODB CONNECTION — CACHED (Vercel serverless ke liye)
+// MONGODB CONNECTION — GRACEFUL (crash nahi hoga)
 // ═══════════════════════════════════════════════════
 
 let cached = global.mongoose;
@@ -65,22 +65,22 @@ async function connectDB() {
     return cached.conn;
   }
 
-  // Connection in progress — wait karo
+  // Connection in progress
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,           // Timeout ke bajaye turant error
-      maxPoolSize: 10,                 // Max 10 connections
-      minPoolSize: 2,                  // Min 2 connections ready
-      serverSelectionTimeoutMS: 30000, // 30 sec server dhoondne ke liye
-      socketTimeoutMS: 45000,          // 45 sec socket timeout
-      connectTimeoutMS: 30000,         // 30 sec connect timeout
-      maxIdleTimeMS: 270000,           // 4.5 min idle timeout
-      heartbeatFrequencyMS: 10000      // 10 sec heartbeat
+      bufferCommands: false,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000, // 5 sec — fast fail
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      maxIdleTimeMS: 270000
     };
 
     console.log('Connecting to MongoDB...');
 
-    cached.promise = mongoose.connect(process.env.MONGO_URI, opts)
+    cached.promise = mongoose
+      .connect(process.env.MONGO_URI, opts)
       .then((mongooseInstance) => {
         console.log('✓ MongoDB connected');
         return mongooseInstance;
@@ -103,27 +103,23 @@ async function connectDB() {
 }
 
 // ═══════════════════════════════════════════════════
-// DB CONNECTION MIDDLEWARE — Har request se pehle
+// DB MIDDLEWARE — Har request se pehle connect (silent)
 // ═══════════════════════════════════════════════════
-
 app.use(async (req, res, next) => {
   try {
     await connectDB();
-    next();
   } catch (err) {
-    console.error('DB middleware error:', err.message);
-    res.status(500).json({
-      error: 'Database connection failed',
-      details: err.message
-    });
+    // DB fail — request continue karo, route handle karega
+    console.error('DB middleware: connection failed, continuing without DB');
   }
+  next();
 });
 
 // ═══════════════════════════════════════════════════
 // ROUTES
 // ═══════════════════════════════════════════════════
 
-// Root route — health check
+// Root route
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
@@ -133,7 +129,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check
+// Health check — DB status bhi batao
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -148,32 +144,28 @@ app.use('/api/hotels', require('./routes/hotels'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error:', err.stack);
   res.status(500).json({ error: 'Something went wrong' });
 });
 
 // ═══════════════════════════════════════════════════
-// LOCAL DEVELOPMENT vs VERCEL
+// LOCAL DEV vs VERCEL
 // ═══════════════════════════════════════════════════
 
-// Local development — server start karo
+// Local development — server start
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
 
-  connectDB()
-    .then(() => {
-      app.listen(PORT, () => {
-        console.log(`✓ Server running on port ${PORT}`);
-        console.log(`✓ MongoDB connected`);
-      });
-    })
-    .catch((err) => {
-      console.error('Failed to start server:', err.message);
-      process.exit(1);
-    });
+  app.listen(PORT, () => {
+    console.log(`✓ Server running on port ${PORT}`);
+    // Background mein DB connect karo
+    connectDB().catch((err) =>
+      console.error('MongoDB initial connection failed:', err.message)
+    );
+  });
 }
 
-// Vercel ke liye — app export karo (serverless function)
+// Vercel ke liye — app export
 module.exports = app;

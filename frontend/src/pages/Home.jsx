@@ -30,12 +30,14 @@ const Home = () => {
   const [googleHotels, setGoogleHotels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [dbError, setDbError] = useState(false);       // ← NEW
+  const [googleError, setGoogleError] = useState(false); // ← NEW
   const [location, setLocation] = useState({
     lat: PESHAWAR_LAT,
     lng: PESHAWAR_LNG,
     label: 'Peshawar City Center'
   });
-  const [radius, setRadius] = useState(5000); // 5km default
+  const [radius, setRadius] = useState(5000);
 
   const heroRef = useRef(null);
   const hotelsRef = useRef(null);
@@ -43,96 +45,80 @@ const Home = () => {
   const stepsRef = useRef(null);
   const testimonialRef = useRef(null);
 
-  // ✅ RANGE 25KM — sirf Peshawar ke 25km ke andar wale users ko DB hotels
   const isUserInPeshawar =
     location.lat &&
     location.lng &&
     getDistanceKm(location.lat, location.lng, PESHAWAR_LAT, PESHAWAR_LNG) < 25;
 
   // ═══════════════════════════════════════════════════
-  // FETCH — DB + Google
+  // FETCH — DB + Google (INDEPENDENT — Promise.allSettled)
   // ═══════════════════════════════════════════════════
   useEffect(() => {
     let isMounted = true;
-    let hardTimeoutId;
 
     const fetchAll = async () => {
       setLoading(true);
       setLoadingGoogle(true);
+      setDbError(false);
+      setGoogleError(false);
 
-      // HARD TIMEOUT — 12 sec baad force loading false
-      hardTimeoutId = setTimeout(() => {
-        if (isMounted) {
-          console.log('⏰ Hard timeout — forcing loading false');
-          setLoading(false);
-          setLoadingGoogle(false);
-        }
-      }, 12000);
+      // Dono requests parallel — koi ek fail ho toh doosra chalta rahe
+      const [dbResult, googleResult] = await Promise.allSettled([
+        isUserInPeshawar
+          ? getNearbyHotels(location.lat, location.lng, radius)
+          : Promise.resolve({ data: [] }),
+        getNearbyGoogleHotels(location.lat, location.lng, radius)
+      ]);
 
-      let dbResults = [];
+      if (!isMounted) return;
 
-      // ─── 1. DB hotels (sirf Peshawar ke 25km mein) ───
-      if (isUserInPeshawar) {
-        try {
-          const dbRes = await getNearbyHotels(
-            location.lat,
-            location.lng,
-            radius
-          );
-          dbResults = dbRes.data || [];
-          if (isMounted) setDbHotels(dbResults);
-        } catch (err) {
-          console.error('DB fetch failed:', err);
-          if (isMounted) setDbHotels([]);
-        }
+      // ─── DB Result ───
+      if (dbResult.status === 'fulfilled') {
+        const dbData = dbResult.value.data || [];
+        setDbHotels(dbData);
+        setDbError(false);
+        console.log('✓ DB hotels:', dbData.length);
       } else {
-        if (isMounted) setDbHotels([]);
+        console.error('✗ DB fetch failed:', dbResult.reason);
+        setDbHotels([]);
+        setDbError(true);
       }
+      setLoading(false);
 
-      if (isMounted) setLoading(false);
+      // ─── Google Result ───
+      if (googleResult.status === 'fulfilled') {
+        const googleData = googleResult.value.data || [];
 
-      // ─── 2. Google hotels (Geoapify — har jagah) ───
-      try {
-        const googleRes = await getNearbyGoogleHotels(
-          location.lat,
-          location.lng,
-          radius
-        );
-
+        // Duplicates remove (DB names ke saath)
         const dbNames = new Set(
-          (isUserInPeshawar ? dbResults : []).map((h) =>
-            h.name.toLowerCase().trim()
-          )
+          (dbResult.status === 'fulfilled' ? dbResult.value.data || [] : [])
+            .map((h) => h.name.toLowerCase().trim())
         );
 
-        const uniqueGoogle = (googleRes.data || []).filter((gh) => {
+        const uniqueGoogle = googleData.filter((gh) => {
           const gName = gh.displayName?.text?.toLowerCase().trim();
           if (!gName) return false;
           for (const dbName of dbNames) {
-            if (gName.includes(dbName) || dbName.includes(gName)) {
-              return false;
-            }
+            if (gName.includes(dbName) || dbName.includes(gName)) return false;
           }
           return true;
         });
 
-        if (isMounted) setGoogleHotels(uniqueGoogle);
-      } catch (err) {
-        console.error('Google fetch failed:', err);
-        if (isMounted) setGoogleHotels([]);
-      } finally {
-        if (isMounted) {
-          setLoadingGoogle(false);
-          if (hardTimeoutId) clearTimeout(hardTimeoutId);
-        }
+        setGoogleHotels(uniqueGoogle);
+        setGoogleError(false);
+        console.log('✓ Google hotels:', uniqueGoogle.length);
+      } else {
+        console.error('✗ Google fetch failed:', googleResult.reason);
+        setGoogleHotels([]);
+        setGoogleError(true);
       }
+      setLoadingGoogle(false);
     };
 
     fetchAll();
 
     return () => {
       isMounted = false;
-      if (hardTimeoutId) clearTimeout(hardTimeoutId);
     };
   }, [location.lat, location.lng, radius, isUserInPeshawar]);
 
@@ -275,7 +261,6 @@ const Home = () => {
             <span className="text-xs text-gray-500 whitespace-nowrap">
               Within {(radius / 1000).toFixed(1)}km
             </span>
-            {/* ✅ RADIUS SLIDER — MAX 25KM */}
             <input
               type="range"
               min="1000"
@@ -290,7 +275,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* DB HOTELS — sirf Peshawar ke 25km mein */}
+      {/* DB HOTELS */}
       {isUserInPeshawar ? (
         <section ref={hotelsRef} className="px-6 max-w-6xl mx-auto pb-16">
           <div className="flex items-end justify-between mb-12">
@@ -319,6 +304,22 @@ const Home = () => {
                 </div>
               ))}
             </div>
+          ) : dbError ? (
+            /* DB ERROR — friendly message */
+            <div className="text-center py-12 bg-amber-50 border border-amber-200 rounded-2xl">
+              <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+              </div>
+              <p className="text-amber-700 font-medium mb-2">
+                Platform hotels temporarily unavailable
+              </p>
+              <p className="text-sm text-amber-600 max-w-md mx-auto">
+                We're having trouble loading our curated hotels. Please check back soon. Meanwhile, explore nearby hotels below.
+              </p>
+            </div>
           ) : dbHotels.length === 0 ? (
             <div className="text-center py-12 bg-white border border-gray-200 rounded-2xl">
               <p className="text-gray-500 mb-2">No platform hotels in this area.</p>
@@ -335,7 +336,6 @@ const Home = () => {
           )}
         </section>
       ) : (
-        /* NOT FOR YOUR CITY YET */
         <section className="px-6 max-w-4xl mx-auto pb-16">
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-10 md:p-12 text-center">
             <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
@@ -364,7 +364,7 @@ const Home = () => {
         </section>
       )}
 
-      {/* GOOGLE HOTELS — har jagah */}
+      {/* GOOGLE HOTELS — independent */}
       <section
         ref={googleRef}
         className="px-6 max-w-6xl mx-auto pb-24 pt-16 border-t border-gray-200"
@@ -508,10 +508,10 @@ const Home = () => {
             </p>
             <div className="flex items-center justify-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-full bg-teal-700 text-white flex items-center justify-center text-sm font-medium">
-                QK
+                AK
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Qadeer K.</p>
+                <p className="text-sm font-medium text-gray-900">Ayesha K.</p>
                 <p className="text-xs text-gray-500">Peshawar local</p>
               </div>
             </div>
