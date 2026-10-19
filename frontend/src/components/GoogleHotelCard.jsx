@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const GoogleHotelCard = ({ place }) => {
+const getDistanceKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const GoogleHotelCard = ({ place, userLocation }) => {
   const [imgError, setImgError] = useState(false);
 
   const name = place.displayName?.text || 'Unknown Hotel';
@@ -9,13 +23,18 @@ const GoogleHotelCard = ({ place }) => {
   const rating = place.rating;
   const reviewCount = place.userRatingCount;
   const phone = place.internationalPhoneNumber;
-  const photoName = place.photos?.[0]?.name;
-
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-  const photoUrl = photoName
-    ? `${API_BASE}/hotels/photo-proxy?name=${encodeURIComponent(photoName)}`
-    : null;
+  
+  // Distance calculate karo
+  let distanceText = null;
+  if (userLocation && userLocation.lat && userLocation.lng && place.location) {
+    const dist = getDistanceKm(
+      userLocation.lat, 
+      userLocation.lng, 
+      place.location.latitude, 
+      place.location.longitude
+    );
+    distanceText = `${dist.toFixed(1)} km away`;
+  }
 
   // Unsplash fallback images
   const unsplashImages = [
@@ -23,10 +42,7 @@ const GoogleHotelCard = ({ place }) => {
     'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=600&q=80',
     'https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=600&q=80',
     'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=600&q=80',
-    'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=600&q=80',
-    'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&q=80',
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=600&q=80',
-    'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600&q=80'
+    'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=600&q=80'
   ];
 
   const getImageIndex = (str) => {
@@ -39,8 +55,7 @@ const GoogleHotelCard = ({ place }) => {
   };
 
   const imageIndex = getImageIndex(name);
-  const displayImage =
-    photoUrl && !imgError ? photoUrl : unsplashImages[imageIndex];
+  const displayImage = unsplashImages[imageIndex];
 
   return (
     <Link
@@ -57,15 +72,22 @@ const GoogleHotelCard = ({ place }) => {
           onError={() => setImgError(true)}
         />
 
-        <span className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1 text-xs font-medium text-teal-700 rounded-full shadow-sm">
-          Discover
-        </span>
+        {/* Distance Badge */}
+        {distanceText && (
+          <span className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm px-3 py-1 text-xs font-medium text-gray-700 rounded-full shadow-sm">
+            📍 {distanceText}
+          </span>
+        )}
 
         {rating && (
-          <span className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm px-3 py-1 text-xs font-medium text-amber-600 rounded-full shadow-sm flex items-center gap-1">
+          <span className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm px-3 py-1 text-xs font-medium text-amber-600 rounded-full shadow-sm flex items-center gap-1">
             ★ {rating.toFixed(1)}
           </span>
         )}
+
+        <span className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1 text-xs font-medium text-teal-700 rounded-full shadow-sm">
+          Discover
+        </span>
       </div>
 
       <div className="p-6">
@@ -82,14 +104,7 @@ const GoogleHotelCard = ({ place }) => {
           </span>
           <span className="text-xs text-teal-700 group-hover:underline flex items-center gap-1">
             View details
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M7 17 17 7M7 7h10v10" />
             </svg>
           </span>
